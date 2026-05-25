@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config';
 import authRouter from './auth/auth.routes';
 import { seedUsers } from './auth/users.store';
+import weatherRouter from './weather/weather.routes';
 
 export function createApp(): Express {
   // Idempotent — safe to call on every app construction, including per-test.
@@ -29,6 +30,7 @@ export function createApp(): Express {
   });
 
   app.use('/api/auth', authRouter);
+  app.use('/api/weather', weatherRouter);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not found' });
