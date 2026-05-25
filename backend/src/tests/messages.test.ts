@@ -1,5 +1,8 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
 import { createApp } from '../app';
 import {
   addMessage,
@@ -10,6 +13,8 @@ import {
   historyQuerySchema,
   messageInputSchema,
 } from '../messages/messages.schema';
+import { closeSocket, initSocket, roomFor } from '../realtime/socket';
+import type { LiveMessage } from '../types';
 
 // ---------------------------------------------------------------------------
 // Zod schemas — accept and reject payloads
@@ -332,5 +337,196 @@ describe('GET /api/messages', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.messages).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// roomFor — city-to-room normalisation (unit)
+// ---------------------------------------------------------------------------
+
+describe('roomFor', () => {
+  it('prefixes "city:" and lowercases the name', () => {
+    expect(roomFor('Melbourne')).toBe('city:melbourne');
+    expect(roomFor('MELBOURNE')).toBe('city:melbourne');
+  });
+
+  it('trims whitespace', () => {
+    expect(roomFor('  Melbourne  ')).toBe('city:melbourne');
+  });
+
+  it('produces the same key for equivalent inputs', () => {
+    expect(roomFor('Melbourne')).toBe(roomFor('  MELBOURNE  '));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Socket.IO real-time layer (integration)
+// ---------------------------------------------------------------------------
+
+describe('Socket.IO real-time layer', () => {
+  let httpServer: http.Server;
+  let url: string;
+  let socketToken: string;
+  let socketApp: ReturnType<typeof createApp>;
+
+  function joinCity(client: ClientSocket, city: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      client.emit(
+        'join-city',
+        city,
+        (res: { ok: boolean; error?: string }) => {
+          if (res?.ok) resolve();
+          else reject(new Error(res?.error ?? 'join failed'));
+        },
+      );
+    });
+  }
+
+  function connect(authOverride?: object): Promise<ClientSocket> {
+    const socket = ioClient(url, {
+      auth: authOverride ?? { token: socketToken },
+      reconnection: false,
+      transports: ['websocket'],
+    });
+    return new Promise((resolve, reject) => {
+      socket.once('connect', () => resolve(socket));
+      socket.once('connect_error', (err) => reject(err));
+    });
+  }
+
+  beforeAll(async () => {
+    socketApp = createApp();
+    httpServer = http.createServer(socketApp);
+    initSocket(httpServer);
+
+    await new Promise<void>((resolve) => {
+      httpServer.listen(0, () => {
+        const address = httpServer.address() as AddressInfo;
+        url = `http://localhost:${address.port}`;
+        resolve();
+      });
+    });
+
+    const login = await request(socketApp)
+      .post('/api/auth/login')
+      .send({ username: 'demo', password: 'demo123' });
+    socketToken = login.body.token;
+  });
+
+  afterAll(async () => {
+    await closeSocket();
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  beforeEach(() => {
+    clearMessages();
+  });
+
+  it('rejects connections with no token', async () => {
+    await expect(connect({})).rejects.toThrow(/auth/i);
+  });
+
+  it('rejects connections with an invalid token', async () => {
+    await expect(connect({ token: 'not-a-jwt' })).rejects.toThrow(
+      /invalid|expired/i,
+    );
+  });
+
+  it('delivers a live-message to the joined city room', async () => {
+    const client = await connect();
+    try {
+      await joinCity(client, 'Melbourne');
+
+      const received = new Promise<LiveMessage>((resolve) => {
+        client.once('live-message', resolve);
+      });
+
+      await request(socketApp)
+        .post('/api/messages')
+        .set('Authorization', `Bearer ${socketToken}`)
+        .send({
+          city: 'Melbourne',
+          message: 'Storm warning',
+          severity: 'alert',
+        });
+
+      const msg = await received;
+      expect(msg).toMatchObject({
+        city: 'Melbourne',
+        message: 'Storm warning',
+        severity: 'alert',
+      });
+      expect(msg.id).toEqual(expect.any(String));
+    } finally {
+      client.disconnect();
+    }
+  });
+
+  it('does not deliver to clients in other city rooms', async () => {
+    const melClient = await connect();
+    const sydClient = await connect();
+
+    try {
+      await joinCity(melClient, 'Melbourne');
+      await joinCity(sydClient, 'Sydney');
+
+      const melReceived: LiveMessage[] = [];
+      const sydReceived: LiveMessage[] = [];
+      melClient.on('live-message', (msg: LiveMessage) =>
+        melReceived.push(msg),
+      );
+      sydClient.on('live-message', (msg: LiveMessage) =>
+        sydReceived.push(msg),
+      );
+
+      await request(socketApp)
+        .post('/api/messages')
+        .set('Authorization', `Bearer ${socketToken}`)
+        .send({
+          city: 'Sydney',
+          message: 'Sydney alert',
+          severity: 'alert',
+        });
+
+      // Allow time for any errant emit to arrive.
+      await new Promise((r) => setTimeout(r, 100));
+
+      expect(sydReceived).toHaveLength(1);
+      expect(sydReceived[0]?.message).toBe('Sydney alert');
+      expect(melReceived).toHaveLength(0);
+    } finally {
+      melClient.disconnect();
+      sydClient.disconnect();
+    }
+  });
+
+  it('moves a client between rooms when join-city is called again', async () => {
+    const client = await connect();
+    try {
+      await joinCity(client, 'Melbourne');
+      await joinCity(client, 'Sydney');
+
+      const received: LiveMessage[] = [];
+      client.on('live-message', (msg: LiveMessage) => received.push(msg));
+
+      // Send to Melbourne — old room. Client should NOT receive it.
+      await request(socketApp)
+        .post('/api/messages')
+        .set('Authorization', `Bearer ${socketToken}`)
+        .send({ city: 'Melbourne', message: 'Old room', severity: 'info' });
+
+      // Send to Sydney — current room. Client SHOULD receive it.
+      await request(socketApp)
+        .post('/api/messages')
+        .set('Authorization', `Bearer ${socketToken}`)
+        .send({ city: 'Sydney', message: 'New room', severity: 'info' });
+
+      await new Promise((r) => setTimeout(r, 100));
+
+      expect(received).toHaveLength(1);
+      expect(received[0]?.message).toBe('New room');
+    } finally {
+      client.disconnect();
+    }
   });
 });
