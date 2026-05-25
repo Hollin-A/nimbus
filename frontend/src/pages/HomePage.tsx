@@ -1,26 +1,21 @@
-import { Link } from 'react-router-dom';
+import { useAuth } from '../auth/useAuth';
 
 export default function HomePage() {
+  const { user } = useAuth();
+  const firstName = user?.displayName.split(' ')[0] ?? 'there';
+
   return (
     <section className="mx-auto max-w-6xl px-6 py-16 md:py-24">
-      <div className="max-w-3xl">
-        <h1 className="text-4xl md:text-6xl font-extrabold text-ink leading-[1.05] tracking-tight">
-          Live weather and city alerts, in one place.
-        </h1>
-        <p className="mt-6 text-base md:text-lg text-body max-w-prose">
-          Sign in, pick a city, and get current conditions plus real-time alert
-          popups scoped to that city. Built as an installable PWA so you can
-          pin it to your dock or home screen.
-        </p>
-        <div className="mt-10">
-          <Link
-            to="/login"
-            className="inline-flex items-center rounded-full bg-brand px-6 py-3 text-white font-semibold hover:bg-brand-hover transition-colors"
-          >
-            Sign in
-          </Link>
-        </div>
-      </div>
+      <p className="text-xs uppercase tracking-[0.2em] text-brand font-semibold">
+        Home
+      </p>
+      <h1 className="mt-2 text-3xl md:text-5xl font-extrabold text-ink leading-[1.1]">
+        Welcome back, {firstName}.
+      </h1>
+      <p className="mt-4 text-body text-base md:text-lg max-w-prose">
+        City search and current conditions arrive next. After that, live alert
+        popups scoped to the city you're watching.
+      </p>
     </section>
   );
 }
