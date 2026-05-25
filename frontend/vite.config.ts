@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Nimbus',
         short_name: 'Nimbus',
@@ -17,19 +17,24 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         icons: [
-          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
           {
-            src: 'icons/icon-512-maskable.png',
+            src: 'icons/icon.svg',
+            sizes: '192x192 512x512',
+            type: 'image/svg+xml',
+            purpose: 'any',
+          },
+          {
+            src: 'icons/icon-maskable.svg',
             sizes: '512x512',
-            type: 'image/png',
+            type: 'image/svg+xml',
             purpose: 'maskable',
           },
         ],
       },
       workbox: {
-        // App shell is precached; live data (weather API + websocket) always
+        // App shell is precached. Live data (weather API + websocket) always
         // hits the network — stale weather/alerts would be worse than none.
+        // See docs/adr/0005 for the rationale.
         navigateFallback: '/index.html',
         runtimeCaching: [],
       },

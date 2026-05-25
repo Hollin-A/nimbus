@@ -40,6 +40,13 @@ export default {
         input: '10px',
         toast: '16px',
       },
+      boxShadow: {
+        card: '0 1px 2px rgba(20, 17, 37, 0.05)',
+        elevated: '0 12px 32px -8px rgba(20, 17, 37, 0.18)',
+      },
+      maxWidth: {
+        prose: '60ch',
+      },
     },
   },
   plugins: [],

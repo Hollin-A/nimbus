@@ -9,8 +9,17 @@
     height: 100%;
   }
 
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
-    @apply bg-lavender text-ink font-sans antialiased;
+    @apply bg-white text-ink font-sans antialiased;
     font-feature-settings: 'cv11', 'ss01';
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2;
+    outline-color: theme('colors.brand.DEFAULT');
   }
 }
