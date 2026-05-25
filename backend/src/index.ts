@@ -1,3 +1,14 @@
-// Scaffold placeholder. Replaced by the real bootstrap in the next commit
-// (feat(backend): config, shared types and health endpoint).
-export {};
+import http from 'node:http';
+import { createApp } from './app';
+import { config } from './config';
+import { initSocket } from './realtime/socket';
+
+const app = createApp();
+const server = http.createServer(app);
+initSocket(server);
+
+server.listen(config.port, () => {
+  console.log(
+    `Nimbus API listening on http://localhost:${config.port} (${config.nodeEnv})`,
+  );
+});
