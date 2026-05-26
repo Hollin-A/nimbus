@@ -142,6 +142,8 @@ export function getWeather(
 
 export interface PushMessageInput {
   city: string;
+  latitude: number;
+  longitude: number;
   message: string;
   severity: Severity;
 }
@@ -158,11 +160,11 @@ export function pushMessage(
 }
 
 export function getMessageHistory(
-  city: string,
+  city: { latitude: number; longitude: number },
   token: string,
 ): Promise<{ messages: LiveMessage[] }> {
   return request<{ messages: LiveMessage[] }>(
-    `/api/messages?city=${encodeURIComponent(city)}`,
+    `/api/messages?latitude=${city.latitude}&longitude=${city.longitude}`,
     { token },
   );
 }

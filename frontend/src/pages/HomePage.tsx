@@ -29,7 +29,7 @@ export default function HomePage() {
     history: messages,
     latest: liveMessage,
     historyError,
-  } = useCityMessages(selectedCity?.name ?? null);
+  } = useCityMessages(selectedCity);
 
   useEffect(() => {
     if (!selectedCity || !token) return;

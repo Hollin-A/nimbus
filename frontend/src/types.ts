@@ -12,7 +12,12 @@ export interface PublicUser {
 
 export interface LiveMessage {
   id: string;
+  /** Display name of the city. Not unique on its own. */
   city: string;
+  /** Latitude in degrees — identifies the city in combination with longitude. */
+  latitude: number;
+  /** Longitude in degrees. */
+  longitude: number;
   message: string;
   severity: Severity;
   createdAt: string;

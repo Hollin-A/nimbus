@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
 import { ApiError, getMessageHistory } from '../api/client';
 import { useAuth } from '../auth/useAuth';
-import type { LiveMessage } from '../types';
+import type { City, LiveMessage } from '../types';
 import {
   LiveMessagesContext,
   type ConnectionStatus,
@@ -26,20 +26,27 @@ export interface UseCityMessagesResult {
 }
 
 /**
- * Per-city message stream. Joins the Socket.IO room for `city`, fetches the
- * REST history, and merges any live-message events into the history list.
- * Returns null history and null latest when no city is selected.
+ * Per-city message stream. Joins the Socket.IO room for `city` (keyed by its
+ * coordinates), fetches the REST history, and merges live-message events
+ * into the history list. Returns empty history when `city` is null.
+ *
+ * Effects key on `city.latitude` + `city.longitude` (primitives) rather than
+ * the object reference so a parent re-render with a fresh-but-equal City
+ * object doesn't re-fire history fetches.
  */
-export function useCityMessages(city: string | null): UseCityMessagesResult {
+export function useCityMessages(city: City | null): UseCityMessagesResult {
   const { socket } = useLiveMessagesContext();
   const { token } = useAuth();
   const [history, setHistory] = useState<LiveMessage[]>([]);
   const [latest, setLatest] = useState<LiveMessage | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
+  const latitude = city?.latitude ?? null;
+  const longitude = city?.longitude ?? null;
+
   // REST history on city change.
   useEffect(() => {
-    if (!city || !token) {
+    if (latitude === null || longitude === null || !token) {
       setHistory([]);
       setLatest(null);
       setHistoryError(null);
@@ -50,7 +57,7 @@ export function useCityMessages(city: string | null): UseCityMessagesResult {
     setHistory([]);
     setLatest(null);
 
-    getMessageHistory(city, token)
+    getMessageHistory({ latitude, longitude }, token)
       .then(({ messages }) => {
         if (cancelled) return;
         // Preserve any socket-pushed messages that arrived before the REST
@@ -73,14 +80,16 @@ export function useCityMessages(city: string | null): UseCityMessagesResult {
     return () => {
       cancelled = true;
     };
-  }, [city, token]);
+  }, [latitude, longitude, token]);
 
   // Socket room join / live-message subscription.
   useEffect(() => {
-    if (!socket || !city) return;
+    if (!socket || latitude === null || longitude === null) return;
+
+    const joinPayload = { latitude, longitude, name: city?.name };
 
     function joinRoom() {
-      socket?.emit('join-city', city);
+      socket?.emit('join-city', joinPayload);
     }
     function handleLiveMessage(msg: LiveMessage) {
       setHistory((prev) => {
@@ -101,7 +110,11 @@ export function useCityMessages(city: string | null): UseCityMessagesResult {
       socket.off('live-message', handleLiveMessage);
       if (socket.connected) socket.emit('leave-city');
     };
-  }, [socket, city]);
+    // city?.name is included so the optional display name flows through if
+    // it changes for the same coordinates (e.g. a different label for the
+    // same point) — the room itself is keyed by lat/lon so this is purely
+    // a server-side logging hint.
+  }, [socket, latitude, longitude, city?.name]);
 
   return { history, latest, historyError };
 }
