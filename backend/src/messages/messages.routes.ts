@@ -31,7 +31,7 @@ router.get('/', requireAuth, (req: Request, res: Response) => {
     return;
   }
 
-  const messages = getHistory(parsed.data.city);
+  const messages = getHistory(parsed.data.latitude, parsed.data.longitude);
   res.json({ messages });
 });
 
