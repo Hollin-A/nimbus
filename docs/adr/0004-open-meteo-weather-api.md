@@ -46,8 +46,12 @@ both look right to the client.
 
 - Upstream availability is out of our hands. The service throws a
   `WeatherError` with HTTP status 502 when upstream returns non-2xx, the
-  network call fails, or the JSON is unparseable. The route surfaces that
-  502 to the client; the frontend renders a friendly retry card.
+  network call fails, the JSON is unparseable, or **the call exceeds the
+  8-second timeout** (`fetchWithTimeout`). The route surfaces that 502 to
+  the client; the frontend renders a friendly retry card. The backend
+  timeout sits well below the frontend's 15-second client timeout so a
+  stalled upstream always reaches the client as a clean 502, never a hung
+  request handler.
 - WMO code coverage is good but not 100 % (codes 4–44 and a few others are
   unassigned). `describeWeatherCode` returns a generic fallback rather than
   throwing, so an unknown code shows as "Unknown conditions" with a cloudy
