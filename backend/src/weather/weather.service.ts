@@ -90,6 +90,32 @@ export function describeWeatherCode(
 }
 
 // ---------------------------------------------------------------------------
+// Shared upstream plumbing
+// ---------------------------------------------------------------------------
+
+// Backend gives up well before the frontend's 15-second client timeout so a
+// stalled upstream surfaces as a clean 502 to the client rather than a hung
+// request handler.
+const UPSTREAM_TIMEOUT_MS = 8_000;
+
+async function fetchWithTimeout(
+  url: string,
+  timeoutMs = UPSTREAM_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const handle = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(handle);
+  }
+}
+
+function isAbortError(err: unknown): err is DOMException {
+  return err instanceof DOMException && err.name === 'AbortError';
+}
+
+// ---------------------------------------------------------------------------
 // City search (geocoding)
 // ---------------------------------------------------------------------------
 
@@ -111,8 +137,11 @@ export async function searchCities(query: string): Promise<City[]> {
 
   let response: Response;
   try {
-    response = await fetch(url);
-  } catch {
+    response = await fetchWithTimeout(url);
+  } catch (err) {
+    if (isAbortError(err)) {
+      throw new WeatherError('Geocoding upstream timed out', 502);
+    }
     throw new WeatherError('Could not reach geocoding API', 502);
   }
 
@@ -242,8 +271,11 @@ export async function getWeather(
 
   let response: Response;
   try {
-    response = await fetch(url);
-  } catch {
+    response = await fetchWithTimeout(url);
+  } catch (err) {
+    if (isAbortError(err)) {
+      throw new WeatherError('Forecast upstream timed out', 502);
+    }
     throw new WeatherError('Could not reach forecast API', 502);
   }
 

@@ -9,7 +9,13 @@ import {
 } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app';
-import { clearCache, describeWeatherCode } from '../weather/weather.service';
+import {
+  clearCache,
+  describeWeatherCode,
+  getWeather,
+  searchCities,
+  WeatherError,
+} from '../weather/weather.service';
 
 // ---------------------------------------------------------------------------
 // describeWeatherCode — pure WMO-code-to-{label,icon} mapping
@@ -296,5 +302,55 @@ describe('GET /api/weather', () => {
     await request(app).get(url).set('Authorization', `Bearer ${token}`);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Upstream timeout — backend gives up on stalled upstream calls
+// ---------------------------------------------------------------------------
+
+describe('upstream timeout', () => {
+  // Mocks fetch to honour the AbortSignal — resolves never, rejects on abort.
+  function mockHangingUpstream() {
+    fetchMock.mockImplementationOnce((_input, init) => {
+      const signal = (init as { signal?: AbortSignal } | undefined)?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('aborted', 'AbortError'));
+        });
+      });
+    });
+  }
+
+  it('throws WeatherError(502) when geocoding takes longer than the timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      mockHangingUpstream();
+      const promise = searchCities('Melbourne').catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const err = await promise;
+      expect(err).toBeInstanceOf(WeatherError);
+      expect((err as WeatherError).status).toBe(502);
+      expect((err as WeatherError).message).toMatch(/timed out/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('throws WeatherError(502) when the forecast takes longer than the timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      mockHangingUpstream();
+      const promise = getWeather(-37.81, 144.96, 'Melbourne').catch(
+        (e: unknown) => e,
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+      const err = await promise;
+      expect(err).toBeInstanceOf(WeatherError);
+      expect((err as WeatherError).status).toBe(502);
+      expect((err as WeatherError).message).toMatch(/timed out/i);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,5 +1,6 @@
 # Internal working notes — never shipped
 .planning/
+.claude/
 
 # Dependencies
 node_modules/
