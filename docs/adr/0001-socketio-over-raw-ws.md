@@ -19,11 +19,18 @@ The brief explicitly allows "WebSockets or an equivalent real-time solution."
 Use Socket.IO on both sides — `socket.io@4` on the server,
 `socket.io-client@4` on the client.
 
-Each city is a **room** named `city:<lowercased-trimmed-name>` (the
-normalisation lives in `roomFor()`). A connected client joins exactly one
-room at a time — the city it is currently viewing.
-`broadcastMessage(msg)` emits `live-message` to `io.to(roomFor(msg.city))`
-only.
+Each city is a **room** keyed by its coordinates rather than its name —
+`city:<lat>|<lon>` rounded to 4 decimal places (~11m, the same precision
+the weather cache uses). The normalisation lives in `roomFor(lat, lon)`.
+A connected client joins exactly one room at a time — the city it is
+currently viewing. `broadcastMessage(msg)` emits `live-message` to
+`io.to(roomFor(msg.latitude, msg.longitude))` only.
+
+Coordinate-keyed rooms mean two cities sharing a name (e.g. Melbourne, AU
+and Melbourne, FL) have distinct rooms and distinct histories. The
+broadcaster always knows the specific city they are alerting because the
+frontend's `CitySearch` resolves to a fully-qualified `City` object with
+`(name, latitude, longitude)`.
 
 Handshake auth uses the same JWT issued by `POST /api/auth/login`, sent as
 `auth: { token }` on the Socket.IO handshake. A middleware verifies the
