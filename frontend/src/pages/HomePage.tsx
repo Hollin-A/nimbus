@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { ApiError, getWeather } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import CitySearch from '../components/CitySearch';
+import MessageHistory from '../components/MessageHistory';
+import ToastHost from '../components/ToastHost';
 import {
   WeatherCard,
   WeatherEmpty,
@@ -9,6 +11,7 @@ import {
   WeatherLoading,
 } from '../components/WeatherCard';
 import { loadRecent, saveRecent } from '../lib/recentCities';
+import { useCityMessages } from '../socket/useLiveMessages';
 import type { City, Weather } from '../types';
 
 export default function HomePage() {
@@ -21,6 +24,12 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refetchKey, setRefetchKey] = useState(0);
+
+  const {
+    history: messages,
+    latest: liveMessage,
+    historyError,
+  } = useCityMessages(selectedCity?.name ?? null);
 
   useEffect(() => {
     if (!selectedCity || !token) return;
@@ -72,20 +81,34 @@ export default function HomePage() {
           <CitySearch recentCities={recent} onSelect={handleSelectCity} />
         </div>
 
-        <div className="mt-10">
-          {!selectedCity && <WeatherEmpty />}
-          {selectedCity && loading && <WeatherLoading />}
-          {selectedCity && error && !loading && (
-            <WeatherErrorCard
-              message={error}
-              onRetry={() => setRefetchKey((k) => k + 1)}
+        <div className="mt-10 grid gap-6 md:grid-cols-3">
+          <div className="md:col-span-2">
+            {!selectedCity && <WeatherEmpty />}
+            {selectedCity && loading && <WeatherLoading />}
+            {selectedCity && error && !loading && (
+              <WeatherErrorCard
+                message={error}
+                onRetry={() => setRefetchKey((k) => k + 1)}
+              />
+            )}
+            {selectedCity && weather && !loading && !error && (
+              <WeatherCard weather={weather} />
+            )}
+          </div>
+          <aside className="md:col-span-1">
+            <h2 className="text-[11px] uppercase tracking-[0.12em] text-muted font-semibold mb-3">
+              Live alerts
+            </h2>
+            <MessageHistory
+              city={selectedCity?.name ?? null}
+              messages={messages}
+              error={historyError}
             />
-          )}
-          {selectedCity && weather && !loading && !error && (
-            <WeatherCard weather={weather} />
-          )}
+          </aside>
         </div>
       </div>
+
+      <ToastHost latest={liveMessage} />
     </section>
   );
 }

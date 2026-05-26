@@ -4,25 +4,28 @@ import ProtectedRoute from './auth/ProtectedRoute';
 import AppShell from './components/AppShell';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
+import { LiveMessagesProvider } from './socket/LiveMessagesProvider';
 
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppShell />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/" element={<HomePage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <LiveMessagesProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppShell />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/" element={<HomePage />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </LiveMessagesProvider>
     </AuthProvider>
   );
 }

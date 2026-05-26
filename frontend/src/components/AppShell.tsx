@@ -1,18 +1,22 @@
 import { Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import { useConnectionStatus } from '../socket/useLiveMessages';
+import ConnectionStatus from './ConnectionStatus';
 import Wordmark from './Wordmark';
 
 export default function AppShell() {
   const { user, logout } = useAuth();
+  const connectionStatus = useConnectionStatus();
 
   return (
     <div className="min-h-screen flex flex-col bg-white text-ink">
       <header className="border-b border-border bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-5 flex items-center justify-between">
+        <div className="mx-auto max-w-6xl px-6 py-5 flex items-center justify-between gap-4">
           <Link to="/" aria-label="Nimbus home" className="-mx-2 px-2 py-1">
             <Wordmark />
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <ConnectionStatus status={connectionStatus} />
             {user && (
               <span className="text-sm text-body hidden sm:inline">
                 Hi,{' '}

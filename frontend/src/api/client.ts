@@ -1,4 +1,4 @@
-import type { City, PublicUser, Weather } from '../types';
+import type { City, LiveMessage, PublicUser, Weather } from '../types';
 
 const BASE_URL = (
   import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
@@ -128,4 +128,18 @@ export function getWeather(
   return request<{ weather: Weather }>(`/api/weather?${params.toString()}`, {
     token,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Messages
+// ---------------------------------------------------------------------------
+
+export function getMessageHistory(
+  city: string,
+  token: string,
+): Promise<{ messages: LiveMessage[] }> {
+  return request<{ messages: LiveMessage[] }>(
+    `/api/messages?city=${encodeURIComponent(city)}`,
+    { token },
+  );
 }
