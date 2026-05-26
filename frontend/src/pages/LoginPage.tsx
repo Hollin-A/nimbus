@@ -43,8 +43,8 @@ export default function LoginPage() {
         </div>
       </header>
 
-      <main className="flex-1">
-        <div className="mx-auto max-w-6xl px-6 py-16 md:py-24 grid md:grid-cols-2 gap-12 md:gap-16 items-start">
+      <main className="flex-1 flex items-center">
+        <div className="mx-auto max-w-6xl px-6 py-12 w-full grid md:grid-cols-2 gap-12 md:gap-16 items-start">
           {/* Hero copy */}
           <div className="max-w-md">
             <p className="text-xs uppercase tracking-[0.2em] text-brand font-semibold">

@@ -31,7 +31,7 @@ export default function AppShell() {
           </div>
         </div>
       </header>
-      <main className="flex-1">
+      <main className="flex-1 flex flex-col">
         <Outlet />
       </main>
     </div>
