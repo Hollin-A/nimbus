@@ -1,4 +1,10 @@
-import type { City, LiveMessage, PublicUser, Weather } from '../types';
+import type {
+  City,
+  LiveMessage,
+  PublicUser,
+  Severity,
+  Weather,
+} from '../types';
 
 const BASE_URL = (
   import.meta.env.VITE_API_URL ?? 'http://localhost:4000'
@@ -133,6 +139,23 @@ export function getWeather(
 // ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
+
+export interface PushMessageInput {
+  city: string;
+  message: string;
+  severity: Severity;
+}
+
+export function pushMessage(
+  body: PushMessageInput,
+  token: string,
+): Promise<{ message: LiveMessage }> {
+  return request<{ message: LiveMessage }>('/api/messages', {
+    method: 'POST',
+    body,
+    token,
+  });
+}
 
 export function getMessageHistory(
   city: string,
