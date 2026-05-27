@@ -1,15 +1,35 @@
-// Scaffold placeholder. Real routes, providers and pages arrive in
-// later commits (auth, home, broadcast).
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from './auth/AuthContext';
+import ProtectedRoute from './auth/ProtectedRoute';
+import AppShell from './components/AppShell';
+import OfflineNotice from './components/OfflineNotice';
+import BroadcastPage from './pages/BroadcastPage';
+import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import { LiveMessagesProvider } from './socket/LiveMessagesProvider';
+
 export default function App() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-lavender text-ink font-sans">
-      <div className="text-center">
-        <p className="text-sm uppercase tracking-[0.3em] text-brand">Nimbus</p>
-        <h1 className="mt-2 text-2xl font-bold">Scaffold ready</h1>
-        <p className="mt-2 text-body text-sm">
-          Live weather and city alerts. Build in progress.
-        </p>
-      </div>
-    </main>
+    <AuthProvider>
+      <LiveMessagesProvider>
+        <BrowserRouter>
+          <OfflineNotice />
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppShell />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/" element={<HomePage />} />
+              <Route path="/broadcast" element={<BroadcastPage />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </LiveMessagesProvider>
+    </AuthProvider>
   );
 }
