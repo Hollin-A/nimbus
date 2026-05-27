@@ -35,7 +35,10 @@ export default function CitySearch({
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Debounced search.
+  // Debounced search. Each new keystroke aborts the previous in-flight
+  // fetch — otherwise rapid typing piled up concurrent requests and
+  // Open-Meteo's CDN blocked them (every search shares the same Render
+  // outbound IP).
   useEffect(() => {
     const q = query.trim();
     if (!token || q.length < 2) {
@@ -45,14 +48,21 @@ export default function CitySearch({
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
     const handle = setTimeout(async () => {
       try {
-        const { cities } = await searchCities(q, token);
+        const { cities } = await searchCities(q, token, {
+          signal: controller.signal,
+        });
         if (cancelled) return;
         setResults(cities);
       } catch (err) {
+        // Caller-cancellation: our own cleanup fired before this resolved.
+        // Bail silently — UI shouldn't flash an error for a request we
+        // intentionally cancelled.
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (cancelled) return;
         setError(
           err instanceof ApiError
@@ -67,6 +77,7 @@ export default function CitySearch({
     return () => {
       cancelled = true;
       clearTimeout(handle);
+      controller.abort();
     };
   }, [query, token]);
 
