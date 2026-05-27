@@ -4,6 +4,7 @@ import { ApiError, pushMessage } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import CitySearch from '../components/CitySearch';
 import SeveritySelect from '../components/SeveritySelect';
+import { useOnline } from '../lib/useOnline';
 import type { City, Severity } from '../types';
 
 const MAX_MESSAGE_LENGTH = 280;
@@ -11,6 +12,7 @@ const CONFIRMATION_TIMEOUT_MS = 4_000;
 
 export default function BroadcastPage() {
   const { token } = useAuth();
+  const online = useOnline();
   const [targetCity, setTargetCity] = useState<City | null>(null);
   const [message, setMessage] = useState('');
   const [severity, setSeverity] = useState<Severity>('info');
@@ -31,6 +33,7 @@ export default function BroadcastPage() {
   const remaining = MAX_MESSAGE_LENGTH - message.length;
   const canSubmit =
     !submitting &&
+    online &&
     !!token &&
     targetCity !== null &&
     message.trim().length > 0 &&
@@ -197,11 +200,19 @@ export default function BroadcastPage() {
             {submitting ? 'Sending…' : 'Send broadcast'}
           </button>
 
-          <p className="text-xs text-muted">
-            Posts to <code className="font-mono text-ink">POST /api/messages</code>
-            . Delivered instantly over WebSocket to anyone currently watching
-            this city.
-          </p>
+          {!online ? (
+            <p className="text-xs text-amber-700 text-center">
+              You're offline — broadcasts will work again when the connection
+              is back.
+            </p>
+          ) : (
+            <p className="text-xs text-muted">
+              Posts to{' '}
+              <code className="font-mono text-ink">POST /api/messages</code>.
+              Delivered instantly over WebSocket to anyone currently watching
+              this city.
+            </p>
+          )}
         </form>
       </div>
     </section>

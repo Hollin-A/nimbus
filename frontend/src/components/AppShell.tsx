@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { useConnectionStatus } from '../socket/useLiveMessages';
 import ConnectionStatus from './ConnectionStatus';
+import InstallPrompt from './InstallPrompt';
 import Wordmark from './Wordmark';
 
 const NAV_LINKS = [
@@ -37,6 +38,7 @@ export default function AppShell() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3 sm:gap-4">
+            <InstallPrompt />
             <ConnectionStatus status={connectionStatus} />
             {user && (
               <span className="text-sm text-body hidden sm:inline">

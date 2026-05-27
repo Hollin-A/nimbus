@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import AppShell from './components/AppShell';
+import OfflineNotice from './components/OfflineNotice';
 import BroadcastPage from './pages/BroadcastPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
@@ -12,6 +13,7 @@ export default function App() {
     <AuthProvider>
       <LiveMessagesProvider>
         <BrowserRouter>
+          <OfflineNotice />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route
