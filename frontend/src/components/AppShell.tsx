@@ -3,6 +3,7 @@ import { useAuth } from '../auth/useAuth';
 import { useConnectionStatus } from '../socket/useLiveMessages';
 import ConnectionStatus from './ConnectionStatus';
 import InstallPrompt from './InstallPrompt';
+import MobileTabBar from './MobileTabBar';
 import Wordmark from './Wordmark';
 
 const NAV_LINKS = [
@@ -58,9 +59,10 @@ export default function AppShell() {
           </div>
         </div>
       </header>
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col pb-20 md:pb-0">
         <Outlet />
       </main>
+      <MobileTabBar />
     </div>
   );
 }
