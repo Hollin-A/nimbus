@@ -115,6 +115,41 @@ function isAbortError(err: unknown): err is DOMException {
   return err instanceof DOMException && err.name === 'AbortError';
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Render's free tier sleeps after ~15 min idle; the first few outbound calls
+// to Open-Meteo after a cold start fail at the connection level (DNS / TCP
+// warm-up), then stabilise. Those failures are transient — the same request
+// succeeds a beat later — so we retry connection errors and upstream 5xx with
+// a short backoff. We do NOT retry our own timeout (a genuinely hung upstream
+// shouldn't be hammered) or 4xx (won't change on retry).
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 200;
+
+async function fetchWithRetry(url: string): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url);
+      if (response.status >= 500 && attempt < MAX_ATTEMPTS) {
+        await delay(RETRY_BASE_DELAY_MS * attempt);
+        continue;
+      }
+      return response;
+    } catch (err) {
+      if (isAbortError(err)) throw err; // our timeout — don't retry
+      lastError = err;
+      if (attempt < MAX_ATTEMPTS) {
+        await delay(RETRY_BASE_DELAY_MS * attempt);
+        continue;
+      }
+    }
+  }
+  throw lastError;
+}
+
 // ---------------------------------------------------------------------------
 // City search (geocoding)
 // ---------------------------------------------------------------------------
@@ -137,7 +172,7 @@ export async function searchCities(query: string): Promise<City[]> {
 
   let response: Response;
   try {
-    response = await fetchWithTimeout(url);
+    response = await fetchWithRetry(url);
   } catch (err) {
     if (isAbortError(err)) {
       throw new WeatherError('Geocoding upstream timed out', 502);
@@ -271,7 +306,7 @@ export async function getWeather(
 
   let response: Response;
   try {
-    response = await fetchWithTimeout(url);
+    response = await fetchWithRetry(url);
   } catch (err) {
     if (isAbortError(err)) {
       throw new WeatherError('Forecast upstream timed out', 502);
