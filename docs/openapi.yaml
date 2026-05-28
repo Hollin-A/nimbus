@@ -1,0 +1,329 @@
+openapi: 3.0.3
+info:
+  title: Nimbus API
+  version: 1.0.0
+  description: >
+    REST API for Nimbus — live weather and city-scoped alerts.
+
+    All endpoints except `/api/health` and `/api/auth/login` require a Bearer
+    JWT obtained from `/api/auth/login`.
+
+    Real-time alert delivery is handled over Socket.IO, which OpenAPI does not
+    model natively — see the "Socket.IO events" section at the end of this file.
+
+servers:
+  - url: http://localhost:4000
+    description: Local development
+  - url: https://nimbus-backend-514u.onrender.com
+    description: Live demo (Render)
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Weather
+  - name: Messages
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  uptime: { type: number, description: Seconds since process start }
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Exchange credentials for a JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: demo }
+                password: { type: string, example: demo123 }
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, description: JWT, expires per JWT_EXPIRES_IN }
+                  user: { $ref: '#/components/schemas/PublicUser' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Current authenticated user
+      responses:
+        '200':
+          description: The user for the supplied token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/PublicUser' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User not found
+
+  /api/weather/cities:
+    get:
+      tags: [Weather]
+      summary: Search cities (geocoding)
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query, minimum 2 characters
+          schema: { type: string, minLength: 2, example: melbourne }
+      responses:
+        '200':
+          description: Matching cities (may be empty)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cities:
+                    type: array
+                    items: { $ref: '#/components/schemas/City' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+  /api/weather:
+    get:
+      tags: [Weather]
+      summary: Current weather for a coordinate
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema: { type: number, minimum: -90, maximum: 90, example: -37.81 }
+        - name: lon
+          in: query
+          required: true
+          schema: { type: number, minimum: -180, maximum: 180, example: 144.96 }
+        - name: name
+          in: query
+          required: true
+          description: Display name echoed back on the response
+          schema: { type: string, example: Melbourne }
+        - name: country
+          in: query
+          required: false
+          schema: { type: string, example: Australia }
+      responses:
+        '200':
+          description: Normalised current weather
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  weather: { $ref: '#/components/schemas/Weather' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '502':
+          $ref: '#/components/responses/UpstreamError'
+
+  /api/messages:
+    post:
+      tags: [Messages]
+      summary: Broadcast an alert to a city
+      description: >
+        Stores the message and emits it over Socket.IO to everyone watching the
+        target coordinates (`live-message` event in the matching city room).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MessageInput' }
+      responses:
+        '201':
+          description: Stored and broadcast
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { $ref: '#/components/schemas/LiveMessage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      tags: [Messages]
+      summary: Per-city alert history (newest first, capped at 50)
+      parameters:
+        - name: latitude
+          in: query
+          required: true
+          schema: { type: number, minimum: -90, maximum: 90 }
+        - name: longitude
+          in: query
+          required: true
+          schema: { type: number, minimum: -180, maximum: 180 }
+      responses:
+        '200':
+          description: History for the coordinate
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items: { $ref: '#/components/schemas/LiveMessage' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Unauthorized:
+      description: Missing, malformed, invalid or expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Request failed validation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UpstreamError:
+      description: Open-Meteo was unreachable, errored, or timed out
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Severity:
+      type: string
+      enum: [info, warning, alert]
+
+    WeatherIcon:
+      type: string
+      enum: [clear, partly-cloudy, cloudy, fog, drizzle, rain, snow, thunderstorm]
+
+    PublicUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string, example: demo }
+        displayName: { type: string, example: Demo User }
+
+    City:
+      type: object
+      properties:
+        name: { type: string, example: Melbourne }
+        country: { type: string, nullable: true, example: Australia }
+        latitude: { type: number, example: -37.814 }
+        longitude: { type: number, example: 144.96332 }
+
+    Weather:
+      type: object
+      properties:
+        city: { type: string, example: Melbourne }
+        country: { type: string, nullable: true, example: Australia }
+        temperature: { type: number, description: °C, rounded, example: 14 }
+        apparentTemperature: { type: number, description: Feels-like °C, example: 14 }
+        humidity: { type: number, description: '%', example: 85 }
+        windSpeed: { type: number, description: km/h, example: 5 }
+        pressure: { type: number, description: hPa, example: 1012 }
+        uvIndex: { type: number, example: 0.15 }
+        high: { type: number, description: Daily max °C, example: 15 }
+        low: { type: number, description: Daily min °C, example: 10 }
+        isDay: { type: boolean }
+        weatherCode: { type: integer, description: Raw WMO code, example: 2 }
+        condition: { type: string, example: Partly cloudy }
+        icon: { $ref: '#/components/schemas/WeatherIcon' }
+        localTime: { type: string, description: ISO local time at the city }
+        observedAt: { type: string, format: date-time }
+
+    MessageInput:
+      type: object
+      required: [city, latitude, longitude, message]
+      properties:
+        city: { type: string, maxLength: 100, example: Melbourne }
+        latitude: { type: number, minimum: -90, maximum: 90, example: -37.81 }
+        longitude: { type: number, minimum: -180, maximum: 180, example: 144.96 }
+        message: { type: string, minLength: 1, maxLength: 280 }
+        severity:
+          allOf:
+            - $ref: '#/components/schemas/Severity'
+          default: info
+
+    LiveMessage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        city: { type: string, example: Melbourne }
+        latitude: { type: number, example: -37.81 }
+        longitude: { type: number, example: 144.96 }
+        message: { type: string }
+        severity: { $ref: '#/components/schemas/Severity' }
+        createdAt: { type: string, format: date-time }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        details:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: Optional per-field validation errors (from Zod)
+
+security:
+  - bearerAuth: []
+
+# ---------------------------------------------------------------------------
+# Socket.IO events (not expressible in OpenAPI; documented here)
+# ---------------------------------------------------------------------------
+# Namespace: /   ·   Handshake auth: { token: <JWT> }
+# A connection with a missing or invalid token is rejected with connect_error.
+#
+#   join-city    client → server   { latitude: number, longitude: number, name?: string }
+#                                   Joins the room for those coords; optional ack { ok, error? }.
+#   leave-city   client → server   (no payload)   Leaves the current room; optional ack.
+#   live-message server → client   LiveMessage    Emitted to a city room when POST /api/messages
+#                                                  targets those coordinates.
