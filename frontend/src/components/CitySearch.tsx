@@ -107,7 +107,7 @@ export default function CitySearch({
           onFocus={() => setOpen(true)}
           placeholder="Search for a city…"
           aria-label="Search for a city"
-          className="w-full rounded-full border border-border bg-white pl-11 pr-4 py-3 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+          className="w-full rounded-full border border-border bg-white pl-11 pr-4 py-3 text-base md:text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
         />
         {showDropdown && (
           <div className="absolute z-10 mt-2 w-full rounded-card border border-border bg-white shadow-elevated overflow-hidden">
