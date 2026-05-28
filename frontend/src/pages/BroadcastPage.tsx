@@ -158,7 +158,7 @@ export default function BroadcastPage() {
               rows={4}
               maxLength={MAX_MESSAGE_LENGTH}
               required
-              className="mt-1 w-full rounded-input border border-border bg-white px-3 py-2.5 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 resize-none"
+              className="mt-1 w-full rounded-input border border-border bg-white px-3 py-2.5 text-base md:text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 resize-none"
             />
           </div>
 
