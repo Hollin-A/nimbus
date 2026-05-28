@@ -22,5 +22,3 @@ export const config = Object.freeze({
   jwtExpiresIn: parsed.JWT_EXPIRES_IN,
   corsOrigin: parsed.CORS_ORIGIN,
 });
-
-export type Config = typeof config;

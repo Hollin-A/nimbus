@@ -17,6 +17,14 @@ export default function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+
+    // Validate client-side first so an empty submit shows the error
+    // instantly instead of round-tripping to the server for a 400.
+    if (!username.trim() || !password) {
+      setError('Please fill in both fields.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await login(username.trim(), password);

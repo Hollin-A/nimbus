@@ -59,6 +59,32 @@ describe('LoginPage', () => {
     expect(mockLogin).toHaveBeenCalledWith('demo', 'demo123');
   });
 
+  it('validates empty fields client-side without calling login', async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    // Submit with both fields empty.
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /please fill in both fields/i,
+    );
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
+  it('does not call login when only the username is filled', async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.type(screen.getByLabelText(/username/i), 'demo');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /please fill in both fields/i,
+    );
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
   it('shows "Invalid username or password." on a 401', async () => {
     mockLogin.mockRejectedValue(new ApiError('Invalid credentials', 401));
     const user = userEvent.setup();

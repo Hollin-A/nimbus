@@ -49,8 +49,3 @@ export function toPublicUser(user: User): PublicUser {
     displayName: user.displayName,
   };
 }
-
-/** Test helper — never called from app code. */
-export function clearUsers(): void {
-  users.clear();
-}
