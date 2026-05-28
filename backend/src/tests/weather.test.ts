@@ -354,3 +354,70 @@ describe('upstream timeout', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Upstream retry — transient cold-start failures recover on a later attempt
+// (uses real timers; the retry backoff is 200ms then 400ms)
+// ---------------------------------------------------------------------------
+
+describe('upstream retry', () => {
+  it('retries a transient network failure and succeeds on the next attempt', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+    mockUpstreamJson(200, {
+      results: [
+        { name: 'London', latitude: 51.5, longitude: -0.12, country: 'UK' },
+      ],
+    });
+
+    const cities = await searchCities('London');
+
+    expect(cities).toHaveLength(1);
+    expect(cities[0]?.name).toBe('London');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a transient 5xx and succeeds on the next attempt', async () => {
+    mockUpstreamJson(503, {});
+    mockUpstreamJson(200, { results: [] });
+
+    const cities = await searchCities('Nowhere');
+
+    expect(cities).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after MAX_ATTEMPTS on a persistent network failure', async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+
+    const err = await searchCities('London').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(WeatherError);
+    expect((err as WeatherError).status).toBe(502);
+    expect((err as WeatherError).message).toMatch(/could not reach/i);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries the forecast endpoint too', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+    mockUpstreamJson(200, {
+      current: {
+        time: '2026-05-27T14:00',
+        temperature_2m: 20,
+        apparent_temperature: 19,
+        relative_humidity_2m: 50,
+        wind_speed_10m: 10,
+        surface_pressure: 1012,
+        uv_index: 3,
+        is_day: 1,
+        weather_code: 1,
+      },
+      daily: { temperature_2m_max: [22], temperature_2m_min: [14] },
+      timezone: 'Europe/London',
+    });
+
+    const weather = await getWeather(51.5, -0.12, 'London');
+
+    expect(weather.temperature).toBe(20);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
