@@ -15,7 +15,11 @@ ARG VITE_SOCKET_URL=http://localhost:4000
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_SOCKET_URL=$VITE_SOCKET_URL
 
-COPY . .
+# Selective copies — a README or doc edit shouldn't invalidate the build
+# layer. Mirrors what the backend Dockerfile already does.
+COPY tsconfig*.json vite.config.ts index.html postcss.config.js tailwind.config.js ./
+COPY public ./public
+COPY src ./src
 RUN npm run build
 
 # ---- Runtime stage: nginx serving the static bundle ----
@@ -23,4 +27,10 @@ FROM nginx:alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
+
+# Liveness probe — confirms nginx is actually serving the SPA shell rather
+# than just "the process started". wget is provided by busybox in nginx:alpine.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://127.0.0.1/ || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]
