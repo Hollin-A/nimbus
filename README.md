@@ -107,6 +107,7 @@ Requires **Node 20** (see `.nvmrc`). Two ways to run it.
 ### Option A — Docker (whole stack, one command)
 
 ```bash
+cp .env.example .env       # set JWT_SECRET before first run
 docker compose up --build
 ```
 
