@@ -55,7 +55,32 @@ export function createApp(): Express {
     );
   }
 
-  app.use(helmet());
+  // Explicit overrides on top of helmet's defaults. Defaults already give
+  // us X-Content-Type-Options: nosniff and a baseline CSP; we tighten the
+  // ones whose defaults are weaker than what we want:
+  //   - frameguard:   DENY > SAMEORIGIN (no embedding at all, paired with
+  //                   CSP frame-ancestors 'none' as defence-in-depth)
+  //   - hsts:         1 year + preload (default is 180 days, no preload)
+  //   - referrer:     strict-origin-when-cross-origin (default is no-referrer,
+  //                   which breaks legitimate same-origin nav diagnostics)
+  //   - csp:          start from defaults, override frame-ancestors 'none'
+  app.use(
+    helmet({
+      frameguard: { action: 'deny' },
+      hsts: {
+        maxAge: 31_536_000, // 1 year, matches HSTS preload requirement
+        includeSubDomains: true,
+        preload: true,
+      },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          'frame-ancestors': ["'none'"],
+        },
+      },
+    }),
+  );
   app.use(cors({ origin: config.corsOrigin }));
   app.use(
     rateLimit({
