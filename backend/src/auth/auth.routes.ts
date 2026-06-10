@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import express, { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { authenticate } from './auth.service';
 import { requireAuth } from './auth.middleware';
@@ -11,7 +11,11 @@ const loginSchema = z.object({
 
 const router = Router();
 
-router.post('/login', async (req: Request, res: Response) => {
+// 256B is well above a realistic login body (~80 bytes for the
+// demo account) and well below anything an attacker would want to
+// throw at bcrypt. The 413 short-circuits the bcrypt compare on
+// oversized credentials.
+router.post('/login', express.json({ limit: '256b' }), async (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({

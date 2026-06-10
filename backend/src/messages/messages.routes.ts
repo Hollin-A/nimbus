@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import express, { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../auth/auth.middleware';
 import { broadcastMessage } from '../realtime/socket';
 import { addMessage, getHistory } from './messages.store';
@@ -6,7 +6,11 @@ import { historyQuerySchema, messageInputSchema } from './messages.schema';
 
 const router = Router();
 
-router.post('/', requireAuth, (req: Request, res: Response) => {
+// Order: requireAuth → json → handler. Auth-first means anonymous
+// callers get 401 before the body parser runs; no info leak about
+// the size limit to unauth probers. 1kB caps the realistic body
+// (Zod caps message at 280 chars; the wrapper adds ~60 bytes).
+router.post('/', requireAuth, express.json({ limit: '1kb' }), (req: Request, res: Response) => {
   const parsed = messageInputSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({

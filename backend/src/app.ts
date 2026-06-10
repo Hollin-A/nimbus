@@ -90,7 +90,12 @@ export function createApp(): Express {
       legacyHeaders: false,
     }),
   );
-  app.use(express.json({ limit: '32kb' }));
+  // No global body parser — each POST route below opts in to express.json
+  // with a tight per-route limit (auth.routes 256B, messages.routes 1kB).
+  // Anything new that needs to read a JSON body has to declare its own
+  // limit, which surfaces the "what is the realistic max body for this
+  // endpoint" question at write time instead of leaving it to the
+  // 32kb global default.
 
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', uptime: process.uptime() });
