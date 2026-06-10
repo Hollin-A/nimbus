@@ -64,6 +64,22 @@ describe('POST /api/auth/login', () => {
 
     expect(res.status).toBe(400);
   });
+
+  it('returns 413 when the request body exceeds the per-route limit', async () => {
+    // ~340-byte body; the per-route limit will be 256B so this exceeds
+    // it. Without the limit the request would reach bcrypt before being
+    // rejected with 401 — the 413 guard short-circuits that work.
+    const oversized = JSON.stringify({
+      username: 'demo',
+      password: 'x'.repeat(300),
+    });
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('Content-Type', 'application/json')
+      .send(oversized);
+
+    expect(res.status).toBe(413);
+  });
 });
 
 describe('GET /api/auth/me', () => {

@@ -434,6 +434,26 @@ describe('POST /api/messages', () => {
     expect(res.body.messages).toHaveLength(1);
     expect(res.body.messages[0].message).toBe('Persistent');
   });
+
+  it('returns 413 when the request body exceeds the per-route limit', async () => {
+    // ~1560-byte body; the per-route limit will be 1kB. Without the
+    // limit, Zod rejects the 1500-char message as 400 — the 413 guard
+    // short-circuits that schema work at the edge.
+    const res = await request(app)
+      .post('/api/messages')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Content-Type', 'application/json')
+      .send(
+        JSON.stringify({
+          city: 'Melbourne',
+          ...MELBOURNE_AU,
+          message: 'x'.repeat(1500),
+          severity: 'info',
+        }),
+      );
+
+    expect(res.status).toBe(413);
+  });
 });
 
 describe('GET /api/messages', () => {
