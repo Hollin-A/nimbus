@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { createApp } from '../app';
+import { config } from '../config';
 
 // Outside-in TDD: these specs describe the HTTP contract first. The next
 // commit adds users.store, auth.service, auth.middleware and auth.routes
@@ -133,6 +135,44 @@ describe('GET /api/auth/me', () => {
     const res = await request(app)
       .get('/api/auth/me')
       .set('Authorization', `Bearer ${foreignToken}`);
+
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 401 for a token signed with HS512 instead of HS256 (algorithm-confusion guard)', async () => {
+    // jsonwebtoken v9 defaults to accepting HS256/HS384/HS512 — so a
+    // token signed with HS512 using our secret verifies just as well
+    // as HS256. Pinning verify to algorithms: ['HS256'] closes that.
+    // Today this returns 404 (token verifies, sub doesn't match a
+    // user) — proves the verifier accepts the wrong algorithm.
+    const hs512Token = jwt.sign(
+      { sub: 'irrelevant', username: 'attacker' },
+      config.jwtSecret,
+      { algorithm: 'HS512' },
+    );
+
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${hs512Token}`);
+
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 401 for a hand-crafted alg:'none' token", async () => {
+    // jsonwebtoken v9 already rejects alg:none by default; pinning to
+    // algorithms:['HS256'] makes that guarantee independent of future
+    // library defaults. Regression guard — green today and after.
+    const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString(
+      'base64url',
+    );
+    const payload = Buffer.from(
+      JSON.stringify({ sub: 'attacker', username: 'attacker' }),
+    ).toString('base64url');
+    const noneToken = `${header}.${payload}.`;
+
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${noneToken}`);
 
     expect(res.status).toBe(401);
   });
