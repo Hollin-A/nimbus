@@ -10,6 +10,7 @@ import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import { config } from './config';
 import { logger } from './logger';
+import { requestContext } from './middleware/request-context';
 import authRouter from './auth/auth.routes';
 import { seedUsers } from './auth/users.store';
 import weatherRouter from './weather/weather.routes';
@@ -48,12 +49,21 @@ export function createApp(): Express {
 
   const app = express();
 
-  // Request logging — first, so it captures every request (including
-  // rate-limited 429s and 404s). Skip /api/health (Render + the uptime ping
-  // poll it constantly) and stay silent during tests.
+  // Correlation id — first of all, so every downstream middleware and
+  // handler (including morgan, the rate limiter's 429s, and the 404
+  // fallback) can reference req.id / req.log and every response carries
+  // the X-Request-ID header.
+  app.use(requestContext);
+
+  // Request logging — early, so it captures every request (including
+  // rate-limited 429s and 404s). The :id token ties each access-log line
+  // back to the structured pino lines for the same request. Skip
+  // /api/health (Render + the uptime ping poll it constantly) and stay
+  // silent during tests.
   if (config.nodeEnv !== 'test') {
+    morgan.token('id', (req: Request) => req.id);
     app.use(
-      morgan('tiny', {
+      morgan(':id :method :url :status :res[content-length] - :response-time ms', {
         skip: (req) => req.url === '/api/health',
       }),
     );
