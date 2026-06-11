@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import { Server, type Socket } from 'socket.io';
 import { config } from '../config';
+import { logger } from '../logger';
 import { verifyToken, type AuthClaims } from '../auth/auth.service';
 import type { LiveMessage } from '../types';
 
@@ -21,6 +23,8 @@ export function roomFor(latitude: number, longitude: number): string {
 
 interface SocketData {
   auth?: AuthClaims;
+  /** Per-connection correlation id — the socket equivalent of reqId. */
+  connId?: string;
 }
 
 type JoinAck = (response: { ok: boolean; error?: string }) => void;
@@ -48,16 +52,29 @@ export function initSocket(httpServer: HttpServer): Server {
     cors: { origin: config.corsOrigin },
   });
 
-  // Handshake auth — same JWT as the REST API (see ADR 0003).
+  // Handshake auth — same JWT as the REST API (see ADR 0003). The connId
+  // is minted here (before connection) so a rejected handshake is still
+  // traceable, and it carries through to the connection's child logger.
   io.use((socket, next) => {
+    const connId = randomUUID();
+    (socket.data as SocketData).connId = connId;
+
     const raw = socket.handshake.auth as { token?: unknown } | undefined;
     const token = typeof raw?.token === 'string' ? raw.token : null;
     if (!token) {
+      logger.warn(
+        { event: 'socket.handshake.failure', reason: 'missing_token', connId },
+        'socket handshake rejected',
+      );
       next(new Error('Authentication required'));
       return;
     }
     const claims = verifyToken(token);
     if (!claims) {
+      logger.warn(
+        { event: 'socket.handshake.failure', reason: 'invalid_or_expired', connId },
+        'socket handshake rejected',
+      );
       next(new Error('Invalid or expired token'));
       return;
     }
@@ -66,10 +83,17 @@ export function initSocket(httpServer: HttpServer): Server {
   });
 
   io.on('connection', (socket: Socket) => {
+    const { connId, auth } = socket.data as SocketData;
+    const log = logger.child({ connId, userId: auth?.sub });
     let currentRoom: string | null = null;
+
+    log.info({ event: 'socket.connect' }, 'socket connected');
 
     socket.on('join-city', (payload: unknown, ack?: JoinAck) => {
       if (!isValidJoinPayload(payload)) {
+        // Malformed coordinates from an authenticated client are worth a
+        // warn — could indicate a buggy client or probing.
+        log.warn({ event: 'socket.join.invalid' }, 'invalid join payload');
         ack?.({ ok: false, error: 'Invalid coordinates' });
         return;
       }
@@ -79,15 +103,25 @@ export function initSocket(httpServer: HttpServer): Server {
       const room = roomFor(payload.latitude, payload.longitude);
       socket.join(room);
       currentRoom = room;
+      const recipients = io?.sockets.adapter.rooms.get(room)?.size ?? 0;
+      log.info(
+        { event: 'socket.join', room, name: payload.name, recipients },
+        'joined city',
+      );
       ack?.({ ok: true });
     });
 
     socket.on('leave-city', (ack?: JoinAck) => {
       if (currentRoom !== null) {
+        log.info({ event: 'socket.leave', room: currentRoom }, 'left city');
         socket.leave(currentRoom);
         currentRoom = null;
       }
       ack?.({ ok: true });
+    });
+
+    socket.on('disconnect', (reason: string) => {
+      log.info({ event: 'socket.disconnect', reason }, 'socket disconnected');
     });
   });
 
@@ -96,9 +130,15 @@ export function initSocket(httpServer: HttpServer): Server {
 
 export function broadcastMessage(message: LiveMessage): void {
   if (!io) return;
-  io.to(roomFor(message.latitude, message.longitude)).emit(
-    'live-message',
-    message,
+  const room = roomFor(message.latitude, message.longitude);
+  // recipients: 0 is the answer to "I broadcast but nobody saw it" —
+  // wrong room or nobody watching. messageId correlates back to the
+  // POST /api/messages response.
+  const recipients = io.sockets.adapter.rooms.get(room)?.size ?? 0;
+  io.to(room).emit('live-message', message);
+  logger.info(
+    { event: 'socket.broadcast', room, messageId: message.id, recipients },
+    'broadcast emitted',
   );
 }
 
