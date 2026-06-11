@@ -2,6 +2,8 @@
 // one WMO-code-to-display mapping, and a small in-memory cache keyed
 // by coordinates. See docs/adr/0004 for why Open-Meteo.
 
+import { logger } from '../logger';
+
 export type WeatherIcon =
   | 'clear'
   | 'partly-cloudy'
@@ -134,6 +136,13 @@ async function fetchWithRetry(url: string): Promise<Response> {
     try {
       const response = await fetchWithTimeout(url);
       if (response.status >= 500 && attempt < MAX_ATTEMPTS) {
+        // warn (not debug): retries are rare and each one signals a
+        // cold-start blip or upstream trouble. The frequency of these
+        // lines is how you answer "is the backend cold-starting a lot?".
+        logger.warn(
+          { event: 'weather.upstream.retry', url, attempt, reason: 'http_5xx', status: response.status },
+          'retrying upstream',
+        );
         await delay(RETRY_BASE_DELAY_MS * attempt);
         continue;
       }
@@ -142,6 +151,10 @@ async function fetchWithRetry(url: string): Promise<Response> {
       if (isAbortError(err)) throw err; // our timeout — don't retry
       lastError = err;
       if (attempt < MAX_ATTEMPTS) {
+        logger.warn(
+          { event: 'weather.upstream.retry', url, attempt, reason: 'connection_error' },
+          'retrying upstream',
+        );
         await delay(RETRY_BASE_DELAY_MS * attempt);
         continue;
       }
@@ -297,10 +310,16 @@ export async function getWeather(
   const key = cacheKey(lat, lon);
   const cached = weatherCache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
+    // debug (not info): cache hit/miss fires on every weather request, so
+    // it's noise at info. Aggregate hit-rate is really a metrics concern
+    // (a counter, per the v2 plan); at debug this is available via
+    // LOG_LEVEL=debug when investigating "is the cache helping?".
+    logger.debug({ event: 'weather.cache.hit', key }, 'weather cache hit');
     // Re-apply the caller's display name/country to a cache hit, so two
     // requests for the same coords with different labels both look right.
     return { ...cached.weather, city: name, country };
   }
+  logger.debug({ event: 'weather.cache.miss', key }, 'weather cache miss');
 
   const url = buildForecastUrl(lat, lon);
 
