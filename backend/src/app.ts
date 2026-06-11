@@ -49,6 +49,12 @@ export function createApp(): Express {
 
   const app = express();
 
+  // Behind Render's proxy the client IP arrives in X-Forwarded-For. Trust
+  // the first hop (not `true`, which is permissive and lets a client spoof
+  // its own rate-limit key) so req.ip is the real client — what the auth
+  // audit log records, and what express-rate-limit keys on.
+  app.set('trust proxy', 1);
+
   // Correlation id — first of all, so every downstream middleware and
   // handler (including morgan, the rate limiter's 429s, and the 404
   // fallback) can reference req.id / req.log and every response carries

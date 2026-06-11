@@ -27,10 +27,26 @@ router.post('/login', express.json({ limit: '256b' }), async (req: Request, res:
 
   const result = await authenticate(parsed.data.username, parsed.data.password);
   if (!result) {
+    // Audit trail: failed-login patterns per IP are the brute-force
+    // signal the rate limiter stops but never surfaces. Attempted
+    // username only — never the password.
+    req.log.warn(
+      { event: 'auth.login.failure', username: parsed.data.username, ip: req.ip },
+      'login failed',
+    );
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
 
+  req.log.info(
+    {
+      event: 'auth.login.success',
+      userId: result.user.id,
+      username: result.user.username,
+      ip: req.ip,
+    },
+    'login succeeded',
+  );
   res.json({ token: result.token, user: result.user });
 });
 
