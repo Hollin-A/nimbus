@@ -27,8 +27,12 @@ const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
 
   if (status >= 500) {
     logger.error(
-      `[error] ${req.method} ${req.originalUrl} —`,
-      err instanceof Error ? (err.stack ?? err.message) : err,
+      {
+        method: req.method,
+        url: req.originalUrl,
+        err: err instanceof Error ? (err.stack ?? err.message) : err,
+      },
+      'unhandled request error',
     );
   }
 
