@@ -34,6 +34,30 @@ describe('app middleware', () => {
   });
 });
 
+describe('request correlation', () => {
+  // Every response carries an X-Request-ID so a client can quote it from a
+  // failed response and we can grep every log line for that one request.
+  // The id is minted by middleware that runs before routing, so even 404s
+  // and rate-limited responses carry it.
+  it('returns an X-Request-ID header on a normal response', async () => {
+    const res = await request(app).get('/api/health');
+    expect(res.headers['x-request-id']).toEqual(expect.any(String));
+    expect(res.headers['x-request-id']).not.toBe('');
+  });
+
+  it('returns a distinct X-Request-ID for each request', async () => {
+    const a = await request(app).get('/api/health');
+    const b = await request(app).get('/api/health');
+    expect(a.headers['x-request-id']).not.toBe(b.headers['x-request-id']);
+  });
+
+  it('sets X-Request-ID even on a 404 (minted before routing)', async () => {
+    const res = await request(app).get('/api/nope');
+    expect(res.headers['x-request-id']).toEqual(expect.any(String));
+    expect(res.headers['x-request-id']).not.toBe('');
+  });
+});
+
 describe('security response headers', () => {
   // Each header maps to a specific risk: clickjacking (X-Frame-Options +
   // CSP frame-ancestors), MIME-sniffing (X-Content-Type-Options),
