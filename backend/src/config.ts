@@ -15,6 +15,10 @@ if (parsed.NODE_ENV === 'production' && parsed.JWT_SECRET === 'dev-only-change-m
   throw new Error('JWT_SECRET must be set to a non-default value in production.');
 }
 
+if (parsed.NODE_ENV === 'production' && parsed.CORS_ORIGIN === 'http://localhost:5173') {
+  throw new Error('CORS_ORIGIN must be set to a non-default value in production.');
+}
+
 export const config = Object.freeze({
   port: parsed.PORT,
   nodeEnv: parsed.NODE_ENV,

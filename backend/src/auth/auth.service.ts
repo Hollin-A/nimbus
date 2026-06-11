@@ -47,7 +47,14 @@ function signToken(user: User): string {
 
 export function verifyToken(token: string): AuthClaims | null {
   try {
-    const decoded = jwt.verify(token, config.jwtSecret);
+    // Pin to HS256 explicitly. jsonwebtoken v9's default accepts the
+    // whole HMAC family (HS256/HS384/HS512) when the secret is a
+    // string, so a token forged with HS512 against our secret would
+    // verify just as well — algorithm-confusion attack. Pinning closes
+    // that and documents intent against future library defaults.
+    const decoded = jwt.verify(token, config.jwtSecret, {
+      algorithms: ['HS256'],
+    });
     if (typeof decoded !== 'object' || decoded === null) return null;
     const payload = decoded as Record<string, unknown>;
     if (typeof payload.sub !== 'string' || typeof payload.username !== 'string') {
