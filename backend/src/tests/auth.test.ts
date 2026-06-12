@@ -1,26 +1,31 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { createApp } from '../app';
 import { config } from '../config';
-
-// Outside-in TDD: these specs describe the HTTP contract first. The next
-// commit adds users.store, auth.service, auth.middleware and auth.routes
-// to make them pass. Until then, every endpoint hits the 404 fallback —
-// that is the intended red state.
+import { seed } from '../seed';
+import { truncateAll, disconnectDb } from './helpers/db';
 
 const app = createApp();
+
+// The demo/viewer accounts now live in Postgres — seed them into a clean
+// test database before the login-based specs run.
+beforeAll(async () => {
+  await truncateAll();
+  await seed();
+});
+afterAll(disconnectDb);
 
 describe('POST /api/auth/login', () => {
   it('returns 200 with a token and a public user on valid credentials', async () => {
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ username: 'demo', password: 'demo123' });
+      .send({ username: 'admin', password: 'admin123' });
 
     expect(res.status).toBe(200);
     expect(res.body.token).toEqual(expect.any(String));
     expect(res.body.token.length).toBeGreaterThan(20);
-    expect(res.body.user).toMatchObject({ username: 'demo' });
+    expect(res.body.user).toMatchObject({ username: 'admin' });
     // Never leak the password hash to clients.
     expect(res.body.user).not.toHaveProperty('passwordHash');
     expect(res.body.user).not.toHaveProperty('password');
@@ -29,7 +34,7 @@ describe('POST /api/auth/login', () => {
   it('returns 401 on an incorrect password', async () => {
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ username: 'demo', password: 'wrong-password' });
+      .send({ username: 'admin', password: 'wrong-password' });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toEqual(expect.any(String));
@@ -39,7 +44,7 @@ describe('POST /api/auth/login', () => {
   it('returns 401 on an unknown username', async () => {
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ username: 'ghost', password: 'demo123' });
+      .send({ username: 'ghost', password: 'admin123' });
 
     expect(res.status).toBe(401);
     expect(res.body).not.toHaveProperty('token');
@@ -48,7 +53,7 @@ describe('POST /api/auth/login', () => {
   it('returns 400 when username is missing', async () => {
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ password: 'demo123' });
+      .send({ password: 'admin123' });
 
     expect(res.status).toBe(400);
   });
@@ -56,7 +61,7 @@ describe('POST /api/auth/login', () => {
   it('returns 400 when password is missing', async () => {
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ username: 'demo' });
+      .send({ username: 'admin' });
 
     expect(res.status).toBe(400);
   });
@@ -72,7 +77,7 @@ describe('POST /api/auth/login', () => {
     // it. Without the limit the request would reach bcrypt before being
     // rejected with 401 — the 413 guard short-circuits that work.
     const oversized = JSON.stringify({
-      username: 'demo',
+      username: 'admin',
       password: 'x'.repeat(300),
     });
     const res = await request(app)
@@ -88,7 +93,7 @@ describe('GET /api/auth/me', () => {
   async function loginAndGetToken(): Promise<string> {
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ username: 'demo', password: 'demo123' });
+      .send({ username: 'admin', password: 'admin123' });
     return res.body.token;
   }
 
@@ -100,7 +105,7 @@ describe('GET /api/auth/me', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.user).toMatchObject({ username: 'demo' });
+    expect(res.body.user).toMatchObject({ username: 'admin' });
     expect(res.body.user).not.toHaveProperty('passwordHash');
   });
 
