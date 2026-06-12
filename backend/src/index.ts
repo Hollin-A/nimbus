@@ -4,6 +4,33 @@ import { config } from './config';
 import { logger } from './logger';
 import { initSocket } from './realtime/socket';
 
+// Errors that bypass Express — a throw in a non-request callback, a
+// rejected promise nobody awaits — hit Node's default: a raw text stack
+// to stderr that a JSON log pipeline mangles, then exit. Log the death
+// in our structured format instead, then exit 1: after an uncaught
+// error the process state is unknown, so the restart (Render / compose
+// restart policy) is the recovery — our job is the readable death
+// certificate. Registered before createApp() so even a crash during
+// startup is captured.
+process.on('uncaughtException', (err) => {
+  logger.fatal(
+    { event: 'process.uncaught_exception', err: err.stack ?? err.message },
+    'uncaught exception — exiting',
+  );
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.fatal(
+    {
+      event: 'process.unhandled_rejection',
+      err: reason instanceof Error ? (reason.stack ?? reason.message) : String(reason),
+    },
+    'unhandled rejection — exiting',
+  );
+  process.exit(1);
+});
+
 const app = createApp();
 const server = http.createServer(app);
 const io = initSocket(server);
