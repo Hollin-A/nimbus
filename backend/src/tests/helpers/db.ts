@@ -10,4 +10,11 @@ export async function truncateAll(): Promise<void> {
   );
 }
 
+// Clears only the messages table — for HTTP/socket tests that seed a
+// user once in beforeAll and reset message state between cases without
+// wiping (and re-seeding) that user.
+export async function truncateMessages(): Promise<void> {
+  await getDb().$executeRawUnsafe('TRUNCATE TABLE messages RESTART IDENTITY');
+}
+
 export { disconnectDb };

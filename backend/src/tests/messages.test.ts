@@ -4,18 +4,14 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
 import { createApp } from '../app';
-import {
-  addMessage,
-  clearMessages,
-  getHistory,
-} from '../messages/messages.store';
+import { messagesRepo } from '../messages/messages.repo';
 import {
   historyQuerySchema,
   messageInputSchema,
 } from '../messages/messages.schema';
 import { closeSocket, initSocket, roomFor } from '../realtime/socket';
 import { seed } from '../seed';
-import { truncateAll, disconnectDb } from './helpers/db';
+import { truncateAll, truncateMessages, disconnectDb } from './helpers/db';
 import type { LiveMessage } from '../types';
 
 // Fixed coordinates for the cities used across tests. Two Melbournes
@@ -165,146 +161,6 @@ describe('historyQuerySchema', () => {
 });
 
 // ---------------------------------------------------------------------------
-// messages.store — coord-keyed buckets, ordering, per-city cap
-// ---------------------------------------------------------------------------
-
-describe('messages.store', () => {
-  beforeEach(() => {
-    clearMessages();
-  });
-
-  it('addMessage returns the stored message with id, coords, severity and createdAt', () => {
-    const msg = addMessage({
-      city: 'Melbourne',
-      ...MELBOURNE_AU,
-      message: 'Storm warning',
-      severity: 'alert',
-    });
-    expect(msg.id).toEqual(expect.any(String));
-    expect(msg.id.length).toBeGreaterThan(8);
-    expect(msg.city).toBe('Melbourne');
-    expect(msg.latitude).toBe(MELBOURNE_AU.latitude);
-    expect(msg.longitude).toBe(MELBOURNE_AU.longitude);
-    expect(msg.message).toBe('Storm warning');
-    expect(msg.severity).toBe('alert');
-    expect(msg.createdAt).toEqual(expect.any(String));
-    expect(Number.isNaN(Date.parse(msg.createdAt))).toBe(false);
-  });
-
-  it('getHistory returns messages for a coord, newest first', async () => {
-    addMessage({
-      city: 'Melbourne',
-      ...MELBOURNE_AU,
-      message: 'First',
-      severity: 'info',
-    });
-    await new Promise((r) => setTimeout(r, 5));
-    addMessage({
-      city: 'Melbourne',
-      ...MELBOURNE_AU,
-      message: 'Second',
-      severity: 'warning',
-    });
-    await new Promise((r) => setTimeout(r, 5));
-    addMessage({
-      city: 'Melbourne',
-      ...MELBOURNE_AU,
-      message: 'Third',
-      severity: 'alert',
-    });
-
-    const history = getHistory(MELBOURNE_AU.latitude, MELBOURNE_AU.longitude);
-    expect(history).toHaveLength(3);
-    expect(history[0]?.message).toBe('Third');
-    expect(history[1]?.message).toBe('Second');
-    expect(history[2]?.message).toBe('First');
-  });
-
-  it('scopes messages per coordinate, not per name', () => {
-    addMessage({
-      city: 'Melbourne',
-      ...MELBOURNE_AU,
-      message: 'AU msg',
-      severity: 'info',
-    });
-    addMessage({
-      city: 'Melbourne',
-      ...MELBOURNE_FL,
-      message: 'FL msg',
-      severity: 'info',
-    });
-
-    expect(
-      getHistory(MELBOURNE_AU.latitude, MELBOURNE_AU.longitude),
-    ).toHaveLength(1);
-    expect(
-      getHistory(MELBOURNE_FL.latitude, MELBOURNE_FL.longitude),
-    ).toHaveLength(1);
-    expect(
-      getHistory(MELBOURNE_AU.latitude, MELBOURNE_AU.longitude)[0]?.message,
-    ).toBe('AU msg');
-    expect(
-      getHistory(MELBOURNE_FL.latitude, MELBOURNE_FL.longitude)[0]?.message,
-    ).toBe('FL msg');
-  });
-
-  it('groups by coordinate regardless of stored display name casing', () => {
-    addMessage({
-      city: 'Melbourne',
-      ...MELBOURNE_AU,
-      message: 'A',
-      severity: 'info',
-    });
-    addMessage({
-      city: 'melbourne',
-      ...MELBOURNE_AU,
-      message: 'B',
-      severity: 'info',
-    });
-    addMessage({
-      city: 'MELBOURNE',
-      ...MELBOURNE_AU,
-      message: 'C',
-      severity: 'info',
-    });
-
-    const history = getHistory(MELBOURNE_AU.latitude, MELBOURNE_AU.longitude);
-    expect(history).toHaveLength(3);
-  });
-
-  it('rounds coordinates to 4 decimal places when keying', () => {
-    addMessage({
-      city: 'Melbourne',
-      latitude: -37.8100001,
-      longitude: 144.9600001,
-      message: 'A',
-      severity: 'info',
-    });
-    // Same coords to 4 dp — should land in the same bucket.
-    expect(getHistory(-37.81, 144.96)).toHaveLength(1);
-  });
-
-  it('caps history at 50 messages per coordinate, dropping the oldest', () => {
-    for (let i = 0; i < 55; i++) {
-      addMessage({
-        city: 'Melbourne',
-        ...MELBOURNE_AU,
-        message: `Msg ${i}`,
-        severity: 'info',
-      });
-    }
-    const history = getHistory(MELBOURNE_AU.latitude, MELBOURNE_AU.longitude);
-    expect(history).toHaveLength(50);
-    expect(history[0]?.message).toBe('Msg 54');
-    expect(history[49]?.message).toBe('Msg 5');
-  });
-
-  it('returns [] for coordinates with no messages', () => {
-    expect(getHistory(0, 0)).toEqual([]);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // HTTP endpoints
 // ---------------------------------------------------------------------------
 
@@ -323,8 +179,8 @@ beforeAll(async () => {
 afterAll(disconnectDb);
 
 describe('POST /api/messages', () => {
-  beforeEach(() => {
-    clearMessages();
+  beforeEach(async () => {
+    await truncateMessages();
   });
 
   it('returns 401 without an auth token', async () => {
@@ -463,8 +319,8 @@ describe('POST /api/messages', () => {
 });
 
 describe('GET /api/messages', () => {
-  beforeEach(() => {
-    clearMessages();
+  beforeEach(async () => {
+    await truncateMessages();
   });
 
   function historyUrl(coords: { latitude: number; longitude: number }) {
@@ -477,14 +333,14 @@ describe('GET /api/messages', () => {
   });
 
   it('returns the history for a coordinate, newest first', async () => {
-    addMessage({
+    await messagesRepo.add({
       city: 'Melbourne',
       ...MELBOURNE_AU,
       message: 'First',
       severity: 'info',
     });
     await new Promise((r) => setTimeout(r, 5));
-    addMessage({
+    await messagesRepo.add({
       city: 'Melbourne',
       ...MELBOURNE_AU,
       message: 'Second',
@@ -527,13 +383,13 @@ describe('GET /api/messages', () => {
   });
 
   it("keeps two Melbournes' histories separate", async () => {
-    addMessage({
+    await messagesRepo.add({
       city: 'Melbourne',
       ...MELBOURNE_AU,
       message: 'AU storm',
       severity: 'alert',
     });
-    addMessage({
+    await messagesRepo.add({
       city: 'Melbourne',
       ...MELBOURNE_FL,
       message: 'FL launch delay',
@@ -636,8 +492,8 @@ describe('Socket.IO real-time layer', () => {
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   });
 
-  beforeEach(() => {
-    clearMessages();
+  beforeEach(async () => {
+    await truncateMessages();
   });
 
   it('rejects connections with no token', async () => {
