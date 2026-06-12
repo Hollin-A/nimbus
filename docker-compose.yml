@@ -6,6 +6,28 @@
 # will refuse to start otherwise — better than shipping a placeholder.
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=nimbus
+      # Same fail-loud pattern as JWT_SECRET — no placeholder default.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env and set a real value}
+      - POSTGRES_DB=nimbus
+    ports:
+      # Published to the host: local `npm run dev` and `prisma migrate`
+      # run outside the compose network and connect via localhost.
+      - "5432:5432"
+    volumes:
+      # Named volume so data survives container recreation.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nimbus -d nimbus"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -16,8 +38,12 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required — copy .env.example to .env and set a real value}
       - JWT_EXPIRES_IN=2h
       - CORS_ORIGIN=http://localhost:8080
+      - DATABASE_URL=postgresql://nimbus:${POSTGRES_PASSWORD}@postgres:5432/nimbus
     ports:
       - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -34,3 +60,6 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  pgdata:
