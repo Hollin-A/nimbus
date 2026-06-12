@@ -1,4 +1,5 @@
-import type { Role, User } from '@prisma/client';
+import { Prisma, type Role, type User } from '@prisma/client';
+import { getDb } from '../db';
 
 /** Thrown on a username collision — the register route maps it to 409. */
 export class DuplicateUsernameError extends Error {
@@ -15,18 +16,25 @@ export interface CreateUserInput {
   role?: Role;
 }
 
-// Skeleton — the spec in tests/usersRepo.test.ts lands first (red);
-// the next commit implements these over Prisma.
 export const usersRepo = {
-  async create(_input: CreateUserInput): Promise<User> {
-    throw new Error('not implemented');
+  async create(input: CreateUserInput): Promise<User> {
+    try {
+      return await getDb().user.create({ data: input });
+    } catch (err) {
+      // P2002 = unique constraint violation. The only unique column on
+      // users is username, so the mapping is unambiguous.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new DuplicateUsernameError(input.username);
+      }
+      throw err;
+    }
   },
 
-  async findByUsername(_username: string): Promise<User | null> {
-    throw new Error('not implemented');
+  async findByUsername(username: string): Promise<User | null> {
+    return getDb().user.findUnique({ where: { username } });
   },
 
-  async findById(_id: string): Promise<User | null> {
-    throw new Error('not implemented');
+  async findById(id: string): Promise<User | null> {
+    return getDb().user.findUnique({ where: { id } });
   },
 };
