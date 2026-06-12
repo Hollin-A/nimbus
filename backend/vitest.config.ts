@@ -12,5 +12,10 @@ export default defineConfig({
     // DATABASE_URL at it before any application code loads.
     globalSetup: ['src/tests/globalSetup.ts'],
     setupFiles: ['src/tests/setupEnv.ts'],
+    // Files share the one nimbus_test database and repo tests truncate
+    // between cases — parallel files would wipe each other's rows
+    // mid-test. Serial files cost a few seconds at this suite size;
+    // revisit with per-worker databases if that ever hurts.
+    fileParallelism: false,
   },
 });

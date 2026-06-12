@@ -1,3 +1,5 @@
+import type { Message } from '@prisma/client';
+import { getDb } from '../db';
 import type { LiveMessage, Severity } from '../types';
 
 export interface MessageInput {
@@ -21,14 +23,42 @@ export function roundCoord(value: number): number {
   return Number(value.toFixed(4));
 }
 
-// Skeleton — the spec in tests/messagesRepo.test.ts lands first (red);
-// the next commit implements these over Prisma.
+// Maps a Prisma row to the wire shape the routes, sockets and frontend
+// already consume — createdAt as an ISO string, not a Date.
+function toLiveMessage(row: Message): LiveMessage {
+  return {
+    id: row.id,
+    city: row.city,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    message: row.message,
+    severity: row.severity as Severity,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 export const messagesRepo = {
-  async add(_input: MessageInput): Promise<LiveMessage> {
-    throw new Error('not implemented');
+  async add(input: MessageInput): Promise<LiveMessage> {
+    const row = await getDb().message.create({
+      data: {
+        city: input.city.trim(),
+        latitude: roundCoord(input.latitude),
+        longitude: roundCoord(input.longitude),
+        message: input.message,
+        severity: input.severity,
+      },
+    });
+    return toLiveMessage(row);
   },
 
-  async history(_latitude: number, _longitude: number): Promise<LiveMessage[]> {
-    throw new Error('not implemented');
+  async history(latitude: number, longitude: number): Promise<LiveMessage[]> {
+    const rows = await getDb().message.findMany({
+      where: { latitude: roundCoord(latitude), longitude: roundCoord(longitude) },
+      // id as a deterministic (if arbitrary) tie-break for rows sharing
+      // a millisecond timestamp.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: MAX_PER_CITY,
+    });
+    return rows.map(toLiveMessage);
   },
 };
