@@ -12,7 +12,6 @@ import { config } from './config';
 import { logger } from './logger';
 import { requestContext } from './middleware/request-context';
 import authRouter from './auth/auth.routes';
-import { seedUsers } from './auth/users.store';
 import weatherRouter from './weather/weather.routes';
 import messagesRouter from './messages/messages.routes';
 
@@ -44,9 +43,10 @@ const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
 };
 
 export function createApp(): Express {
-  // Idempotent — safe to call on every app construction, including per-test.
-  seedUsers();
-
+  // Seeding moved out of app construction — it's an async DB write now
+  // (see seed()), run from index.ts at startup and from the test
+  // harness. createApp stays synchronous so callers (and supertest)
+  // can construct the app without awaiting.
   const app = express();
 
   // Behind Render's proxy the client IP arrives in X-Forwarded-For. Trust

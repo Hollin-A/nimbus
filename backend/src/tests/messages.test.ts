@@ -14,6 +14,8 @@ import {
   messageInputSchema,
 } from '../messages/messages.schema';
 import { closeSocket, initSocket, roomFor } from '../realtime/socket';
+import { seed } from '../seed';
+import { truncateAll, disconnectDb } from './helpers/db';
 import type { LiveMessage } from '../types';
 
 // Fixed coordinates for the cities used across tests. Two Melbournes
@@ -310,11 +312,15 @@ const app = createApp();
 let token: string;
 
 beforeAll(async () => {
+  // demo/viewer live in Postgres now — seed a clean test DB, then log in.
+  await truncateAll();
+  await seed();
   const login = await request(app)
     .post('/api/auth/login')
-    .send({ username: 'demo', password: 'demo123' });
+    .send({ username: 'admin', password: 'admin123' });
   token = login.body.token;
 });
+afterAll(disconnectDb);
 
 describe('POST /api/messages', () => {
   beforeEach(() => {
@@ -621,7 +627,7 @@ describe('Socket.IO real-time layer', () => {
 
     const login = await request(socketApp)
       .post('/api/auth/login')
-      .send({ username: 'demo', password: 'demo123' });
+      .send({ username: 'admin', password: 'admin123' });
     socketToken = login.body.token;
   });
 

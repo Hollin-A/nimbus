@@ -2,7 +2,7 @@ import express, { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { authenticate } from './auth.service';
 import { requireAuth } from './auth.middleware';
-import { findById, toPublicUser } from './users.store';
+import { usersRepo, toPublicUser } from './users.repo';
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -50,7 +50,7 @@ router.post('/login', express.json({ limit: '256b' }), async (req: Request, res:
   res.json({ token: result.token, user: result.user });
 });
 
-router.get('/me', requireAuth, (req: Request, res: Response) => {
+router.get('/me', requireAuth, async (req: Request, res: Response) => {
   const claims = req.auth;
   if (!claims) {
     // Defensive — requireAuth guarantees req.auth, but TS doesn't know that.
@@ -58,7 +58,7 @@ router.get('/me', requireAuth, (req: Request, res: Response) => {
     return;
   }
 
-  const user = findById(claims.sub);
+  const user = await usersRepo.findById(claims.sub);
   if (!user) {
     res.status(404).json({ error: 'User not found' });
     return;

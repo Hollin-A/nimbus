@@ -1,8 +1,9 @@
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import type { User } from '@prisma/client';
 import { config } from '../config';
 import type { PublicUser } from '../types';
-import { findByUsername, toPublicUser, type User } from './users.store';
+import { usersRepo, toPublicUser } from './users.repo';
 
 export interface AuthResult {
   token: string;
@@ -24,7 +25,7 @@ export async function authenticate(
   username: string,
   password: string,
 ): Promise<AuthResult | null> {
-  const user = findByUsername(username);
+  const user = await usersRepo.findByUsername(username);
   if (!user) {
     bcrypt.compareSync(password, DUMMY_HASH);
     return null;

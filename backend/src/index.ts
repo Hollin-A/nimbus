@@ -2,6 +2,8 @@ import http from 'node:http';
 import { createApp } from './app';
 import { config } from './config';
 import { logger } from './logger';
+import { disconnectDb } from './db';
+import { seed } from './seed';
 import { initSocket } from './realtime/socket';
 
 // Errors that bypass Express — a throw in a non-request callback, a
@@ -35,12 +37,24 @@ const app = createApp();
 const server = http.createServer(app);
 const io = initSocket(server);
 
-server.listen(config.port, () => {
-  logger.info(
-    { event: 'server.start', port: config.port, env: config.nodeEnv },
-    `Nimbus API listening on http://localhost:${config.port}`,
-  );
-});
+// Seed the demo accounts before accepting traffic, then listen. seed()
+// is idempotent, so a restart against an existing database is a no-op.
+seed()
+  .then(() => {
+    server.listen(config.port, () => {
+      logger.info(
+        { event: 'server.start', port: config.port, env: config.nodeEnv },
+        `Nimbus API listening on http://localhost:${config.port}`,
+      );
+    });
+  })
+  .catch((err: unknown) => {
+    logger.fatal(
+      { event: 'server.start.failed', err: err instanceof Error ? err.stack : String(err) },
+      'failed to seed/start — exiting',
+    );
+    process.exit(1);
+  });
 
 // Render (and most orchestrators) send SIGTERM before SIGKILL on every
 // deploy. Without a handler Node exits immediately — in-flight requests
@@ -70,9 +84,13 @@ function shutdown(signal: string): void {
   // frame and auto-reconnect to the new deploy), then closes the
   // underlying HTTP server, draining in-flight requests.
   io.close(() => {
-    logger.info({ event: 'server.shutdown.complete' }, 'drained, exiting');
-    clearTimeout(force);
-    process.exit(0);
+    // Close the DB pool too, so the process exits without dangling
+    // connections. Best-effort — exit regardless of the result.
+    void disconnectDb().finally(() => {
+      logger.info({ event: 'server.shutdown.complete' }, 'drained, exiting');
+      clearTimeout(force);
+      process.exit(0);
+    });
   });
 }
 

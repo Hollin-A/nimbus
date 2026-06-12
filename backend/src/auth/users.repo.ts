@@ -1,5 +1,15 @@
 import { Prisma, type Role, type User } from '@prisma/client';
 import { getDb } from '../db';
+import type { PublicUser } from '../types';
+
+/** Maps a stored user row to the client-safe shape (no password hash). */
+export function toPublicUser(user: User): PublicUser {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+  };
+}
 
 /** Thrown on a username collision — the register route maps it to 409. */
 export class DuplicateUsernameError extends Error {
