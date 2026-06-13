@@ -130,6 +130,40 @@ export function getMe(token: string): Promise<{ user: PublicUser }> {
   return request<{ user: PublicUser }>('/api/auth/me', { token });
 }
 
+export function register(
+  username: string,
+  password: string,
+  displayName: string,
+): Promise<{ user: PublicUser }> {
+  return request<{ user: PublicUser }>('/api/auth/register', {
+    method: 'POST',
+    body: { username, password, displayName },
+  });
+}
+
+export interface PasswordResetIssued {
+  token: string;
+  expiresAt: string;
+  note: string;
+}
+
+export function requestPasswordReset(username: string): Promise<PasswordResetIssued> {
+  return request<PasswordResetIssued>('/api/auth/password-reset/request', {
+    method: 'POST',
+    body: { username },
+  });
+}
+
+export function confirmPasswordReset(
+  token: string,
+  password: string,
+): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>('/api/auth/password-reset/confirm', {
+    method: 'POST',
+    body: { token, password },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Weather
 // ---------------------------------------------------------------------------

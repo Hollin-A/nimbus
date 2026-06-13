@@ -1,16 +1,19 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { createApp } from '../app';
 import { config } from '../config';
 import { seed } from '../seed';
+import { usersRepo } from '../auth/users.repo';
+import { refreshTokensRepo } from '../auth/refresh-tokens.repo';
+import { getDb } from '../db';
 import { truncateAll, disconnectDb } from './helpers/db';
 
 const app = createApp();
 
-// The demo/viewer accounts now live in Postgres — seed them into a clean
-// test database before the login-based specs run.
-beforeAll(async () => {
+// Per-test isolation: the register specs create users, so each test
+// starts from a clean DB re-seeded with just the admin/viewer accounts.
+beforeEach(async () => {
   await truncateAll();
   await seed();
 });
@@ -180,5 +183,224 @@ describe('GET /api/auth/me', () => {
       .set('Authorization', `Bearer ${noneToken}`);
 
     expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /api/auth/register', () => {
+  const VALID = { username: 'newbie', password: 'password123', displayName: 'New Bie' };
+
+  it('returns 201 with the public user on a valid body', async () => {
+    const res = await request(app).post('/api/auth/register').send(VALID);
+
+    expect(res.status).toBe(201);
+    expect(res.body.user).toMatchObject({ username: 'newbie', displayName: 'New Bie' });
+    expect(res.body.user.id).toEqual(expect.any(String));
+    // Never leak the hash; register issues no token (login is a separate step).
+    expect(res.body.user).not.toHaveProperty('passwordHash');
+    expect(res.body).not.toHaveProperty('token');
+  });
+
+  it('lets a newly registered user log in', async () => {
+    await request(app).post('/api/auth/register').send(VALID);
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'newbie', password: 'password123' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.token).toEqual(expect.any(String));
+  });
+
+  it('returns 409 on a duplicate username', async () => {
+    await request(app).post('/api/auth/register').send(VALID);
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ ...VALID, displayName: 'Someone Else' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 400 when the username is missing', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ password: 'password123', displayName: 'New Bie' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when the password is shorter than 8 characters', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'shorty', password: 'short', displayName: 'Shorty' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when displayName is missing', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'nodisplay', password: 'password123' });
+    expect(res.status).toBe(400);
+  });
+
+  it('ignores a role in the body — registration cannot self-elevate', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ ...VALID, username: 'sneaky', role: 'admin' });
+
+    expect(res.status).toBe(201);
+    const stored = await usersRepo.findByUsername('sneaky');
+    expect(stored?.role).toBe('user');
+  });
+});
+
+describe('POST /api/auth/password-reset/request', () => {
+  it('returns a token + expiry for a known user', async () => {
+    const res = await request(app)
+      .post('/api/auth/password-reset/request')
+      .send({ username: 'admin' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.token).toEqual(expect.any(String));
+    expect(res.body.expiresAt).toEqual(expect.any(String));
+  });
+
+  it('returns 404 for an unknown user', async () => {
+    const res = await request(app)
+      .post('/api/auth/password-reset/request')
+      .send({ username: 'nobody' });
+
+    // Assert the specific message so this is genuinely red against the
+    // generic 404 fallback ("Not found") before the route exists.
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/no account/i);
+  });
+
+  it('returns 400 when username is missing', async () => {
+    const res = await request(app).post('/api/auth/password-reset/request').send({});
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/auth/password-reset/confirm', () => {
+  async function requestToken(username = 'admin'): Promise<string> {
+    const res = await request(app)
+      .post('/api/auth/password-reset/request')
+      .send({ username });
+    return res.body.token as string;
+  }
+
+  it('resets the password end-to-end: new password works, old fails', async () => {
+    const token = await requestToken();
+
+    const confirm = await request(app)
+      .post('/api/auth/password-reset/confirm')
+      .send({ token, password: 'brand-new-pass' });
+    expect(confirm.status).toBe(200);
+
+    const withNew = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'brand-new-pass' });
+    expect(withNew.status).toBe(200);
+
+    const withOld = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'admin123' });
+    expect(withOld.status).toBe(401);
+  });
+
+  it('returns 400 for an unknown token', async () => {
+    const res = await request(app)
+      .post('/api/auth/password-reset/confirm')
+      .send({ token: 'not-a-real-token', password: 'brand-new-pass' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when reusing an already-used token (single-use)', async () => {
+    const token = await requestToken();
+    await request(app)
+      .post('/api/auth/password-reset/confirm')
+      .send({ token, password: 'brand-new-pass' });
+
+    const reuse = await request(app)
+      .post('/api/auth/password-reset/confirm')
+      .send({ token, password: 'another-new-pass' });
+    expect(reuse.status).toBe(400);
+  });
+
+  it('returns 400 for an expired token', async () => {
+    const token = await requestToken();
+    // Expire it directly — avoids coupling the test to the hash scheme.
+    await getDb().passwordResetToken.updateMany({
+      where: { usedAt: null },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const res = await request(app)
+      .post('/api/auth/password-reset/confirm')
+      .send({ token, password: 'brand-new-pass' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when the new password is too short', async () => {
+    const token = await requestToken();
+    const res = await request(app)
+      .post('/api/auth/password-reset/confirm')
+      .send({ token, password: 'short' });
+    expect(res.status).toBe(400);
+  });
+
+  it('revokes the user’s refresh tokens on a successful reset', async () => {
+    const admin = await usersRepo.findByUsername('admin');
+    await refreshTokensRepo.create({
+      tokenHash: 'rt-hash',
+      userId: admin!.id,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const token = await requestToken();
+    await request(app)
+      .post('/api/auth/password-reset/confirm')
+      .send({ token, password: 'brand-new-pass' });
+
+    const rt = await refreshTokensRepo.findByTokenHash('rt-hash');
+    expect(rt?.revokedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('case-insensitive usernames', () => {
+  it('stores a registered username in lowercase', async () => {
+    await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'NewBie', password: 'password123', displayName: 'New Bie' });
+
+    expect(await usersRepo.findByUsername('newbie')).not.toBeNull();
+    expect(await usersRepo.findByUsername('NewBie')).toBeNull();
+  });
+
+  it('lets a user log in regardless of username casing', async () => {
+    await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'newbie', password: 'password123', displayName: 'New Bie' });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'NEWBIE', password: 'password123' });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('treats a differently-cased username as a duplicate (admin is seeded)', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'ADMIN', password: 'password123', displayName: 'Impostor' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('finds the account for a reset request regardless of casing', async () => {
+    const res = await request(app)
+      .post('/api/auth/password-reset/request')
+      .send({ username: 'ADMIN' });
+
+    expect(res.status).toBe(200);
   });
 });

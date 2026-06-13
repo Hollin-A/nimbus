@@ -67,3 +67,13 @@ describe('usersRepo.findById', () => {
     expect(await usersRepo.findById(randomUUID())).toBeNull();
   });
 });
+
+describe('usersRepo.updatePassword', () => {
+  it('replaces the stored password hash', async () => {
+    const created = await usersRepo.create(VALID);
+    await usersRepo.updatePassword(created.id, '$2a$10$NEWHASHvalueXXXXXXXXXX');
+
+    const found = await usersRepo.findById(created.id);
+    expect(found?.passwordHash).toBe('$2a$10$NEWHASHvalueXXXXXXXXXX');
+  });
+});

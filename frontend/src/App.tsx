@@ -6,6 +6,9 @@ import OfflineNotice from './components/OfflineNotice';
 import BroadcastPage from './pages/BroadcastPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import PasswordResetRequestPage from './pages/PasswordResetRequestPage';
+import PasswordResetConfirmPage from './pages/PasswordResetConfirmPage';
 import { LiveMessagesProvider } from './socket/LiveMessagesProvider';
 
 export default function App() {
@@ -16,6 +19,9 @@ export default function App() {
           <OfflineNotice />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/reset" element={<PasswordResetRequestPage />} />
+            <Route path="/reset/confirm" element={<PasswordResetConfirmPage />} />
             <Route
               element={
                 <ProtectedRoute>

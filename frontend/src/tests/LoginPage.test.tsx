@@ -33,17 +33,30 @@ describe('LoginPage', () => {
   it('renders the username field, password field, and Sign-in button', () => {
     renderLogin();
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /sign in/i }),
     ).toBeInTheDocument();
   });
 
-  it('shows the demo credentials hint', () => {
+  it('shows the demo credentials hint for both roles', () => {
     renderLogin();
-    expect(screen.getByText(/try the demo/i)).toBeInTheDocument();
-    expect(screen.getByText('demo')).toBeInTheDocument();
-    expect(screen.getByText('demo123')).toBeInTheDocument();
+    expect(screen.getByText('admin')).toBeInTheDocument();
+    expect(screen.getByText('admin123')).toBeInTheDocument();
+    expect(screen.getByText('viewer')).toBeInTheDocument();
+    expect(screen.getByText('viewer123')).toBeInTheDocument();
+  });
+
+  it('links to register and password reset', () => {
+    renderLogin();
+    expect(screen.getByRole('link', { name: /create one/i })).toHaveAttribute(
+      'href',
+      '/register',
+    );
+    expect(screen.getByRole('link', { name: /forgot password/i })).toHaveAttribute(
+      'href',
+      '/reset',
+    );
   });
 
   it('calls login with the trimmed username and raw password', async () => {
@@ -52,7 +65,7 @@ describe('LoginPage', () => {
     renderLogin();
 
     await user.type(screen.getByLabelText(/username/i), '  demo  ');
-    await user.type(screen.getByLabelText(/password/i), 'demo123');
+    await user.type(screen.getByLabelText('Password'), 'demo123');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     expect(mockLogin).toHaveBeenCalledOnce();
@@ -91,7 +104,7 @@ describe('LoginPage', () => {
     renderLogin();
 
     await user.type(screen.getByLabelText(/username/i), 'demo');
-    await user.type(screen.getByLabelText(/password/i), 'wrong');
+    await user.type(screen.getByLabelText('Password'), 'wrong');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     const alert = await screen.findByRole('alert');
@@ -104,7 +117,7 @@ describe('LoginPage', () => {
     renderLogin();
 
     await user.type(screen.getByLabelText(/username/i), 'demo');
-    await user.type(screen.getByLabelText(/password/i), 'demo');
+    await user.type(screen.getByLabelText('Password'), 'demo');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     const alert = await screen.findByRole('alert');
@@ -117,7 +130,7 @@ describe('LoginPage', () => {
     renderLogin();
 
     await user.type(screen.getByLabelText(/username/i), 'demo');
-    await user.type(screen.getByLabelText(/password/i), 'demo123');
+    await user.type(screen.getByLabelText('Password'), 'demo123');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     const alert = await screen.findByRole('alert');
@@ -133,7 +146,7 @@ describe('LoginPage', () => {
     renderLogin();
 
     await user.type(screen.getByLabelText(/username/i), 'demo');
-    await user.type(screen.getByLabelText(/password/i), 'demo123');
+    await user.type(screen.getByLabelText('Password'), 'demo123');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     const pendingButton = screen.getByRole('button', { name: /signing in/i });

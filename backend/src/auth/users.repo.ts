@@ -47,4 +47,8 @@ export const usersRepo = {
   async findById(id: string): Promise<User | null> {
     return getDb().user.findUnique({ where: { id } });
   },
+
+  async updatePassword(id: string, passwordHash: string): Promise<void> {
+    await getDb().user.update({ where: { id }, data: { passwordHash } });
+  },
 };
