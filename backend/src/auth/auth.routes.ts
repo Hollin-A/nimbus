@@ -9,8 +9,12 @@ import {
 import { requireAuth } from './auth.middleware';
 import { usersRepo, toPublicUser, DuplicateUsernameError } from './users.repo';
 
+// Usernames are case-insensitive: trim + lowercase at the validation
+// boundary so Admin / ADMIN / admin are one account, and length checks
+// apply to the normalised value. displayName keeps the user's casing
+// for presentation.
 const loginSchema = z.object({
-  username: z.string().min(1),
+  username: z.string().trim().toLowerCase().min(1),
   password: z.string().min(1),
 });
 
@@ -19,12 +23,14 @@ const loginSchema = z.object({
 // self-elevate. password capped at 72 — bcrypt silently truncates
 // beyond that, so a longer value would be a false sense of security.
 const registerSchema = z.object({
-  username: z.string().min(3).max(30),
+  username: z.string().trim().toLowerCase().min(3).max(30),
   password: z.string().min(8).max(72),
-  displayName: z.string().min(1).max(100),
+  displayName: z.string().trim().min(1).max(100),
 });
 
-const resetRequestSchema = z.object({ username: z.string().min(1) });
+const resetRequestSchema = z.object({
+  username: z.string().trim().toLowerCase().min(1),
+});
 const resetConfirmSchema = z.object({
   token: z.string().min(1),
   password: z.string().min(8).max(72),

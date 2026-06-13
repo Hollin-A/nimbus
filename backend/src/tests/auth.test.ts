@@ -365,3 +365,42 @@ describe('POST /api/auth/password-reset/confirm', () => {
     expect(rt?.revokedAt).toBeInstanceOf(Date);
   });
 });
+
+describe('case-insensitive usernames', () => {
+  it('stores a registered username in lowercase', async () => {
+    await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'NewBie', password: 'password123', displayName: 'New Bie' });
+
+    expect(await usersRepo.findByUsername('newbie')).not.toBeNull();
+    expect(await usersRepo.findByUsername('NewBie')).toBeNull();
+  });
+
+  it('lets a user log in regardless of username casing', async () => {
+    await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'newbie', password: 'password123', displayName: 'New Bie' });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'NEWBIE', password: 'password123' });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('treats a differently-cased username as a duplicate (admin is seeded)', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'ADMIN', password: 'password123', displayName: 'Impostor' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('finds the account for a reset request regardless of casing', async () => {
+    const res = await request(app)
+      .post('/api/auth/password-reset/request')
+      .send({ username: 'ADMIN' });
+
+    expect(res.status).toBe(200);
+  });
+});
