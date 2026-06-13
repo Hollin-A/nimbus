@@ -141,6 +141,29 @@ export function register(
   });
 }
 
+export interface PasswordResetIssued {
+  token: string;
+  expiresAt: string;
+  note: string;
+}
+
+export function requestPasswordReset(username: string): Promise<PasswordResetIssued> {
+  return request<PasswordResetIssued>('/api/auth/password-reset/request', {
+    method: 'POST',
+    body: { username },
+  });
+}
+
+export function confirmPasswordReset(
+  token: string,
+  password: string,
+): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>('/api/auth/password-reset/confirm', {
+    method: 'POST',
+    body: { token, password },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Weather
 // ---------------------------------------------------------------------------

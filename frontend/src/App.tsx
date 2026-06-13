@@ -7,6 +7,7 @@ import BroadcastPage from './pages/BroadcastPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import PasswordResetRequestPage from './pages/PasswordResetRequestPage';
 import { LiveMessagesProvider } from './socket/LiveMessagesProvider';
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/reset" element={<PasswordResetRequestPage />} />
             <Route
               element={
                 <ProtectedRoute>
