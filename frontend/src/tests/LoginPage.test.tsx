@@ -39,11 +39,24 @@ describe('LoginPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows the demo credentials hint', () => {
+  it('shows the demo credentials hint for both roles', () => {
     renderLogin();
-    expect(screen.getByText(/try the demo/i)).toBeInTheDocument();
-    expect(screen.getByText('demo')).toBeInTheDocument();
-    expect(screen.getByText('demo123')).toBeInTheDocument();
+    expect(screen.getByText('admin')).toBeInTheDocument();
+    expect(screen.getByText('admin123')).toBeInTheDocument();
+    expect(screen.getByText('viewer')).toBeInTheDocument();
+    expect(screen.getByText('viewer123')).toBeInTheDocument();
+  });
+
+  it('links to register and password reset', () => {
+    renderLogin();
+    expect(screen.getByRole('link', { name: /create account/i })).toHaveAttribute(
+      'href',
+      '/register',
+    );
+    expect(screen.getByRole('link', { name: /forgot password/i })).toHaveAttribute(
+      'href',
+      '/reset',
+    );
   });
 
   it('calls login with the trimmed username and raw password', async () => {

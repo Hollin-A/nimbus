@@ -123,11 +123,25 @@ export default function LoginPage() {
                 {submitting ? 'Signing in…' : 'Sign in'}
               </button>
 
+              <div className="flex items-center justify-between text-sm">
+                <Link to="/register" className="text-brand font-semibold hover:underline">
+                  Create account
+                </Link>
+                <Link to="/reset" className="text-brand font-semibold hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
+
               <p className="text-sm text-muted text-center">
-                Try the demo:{' '}
-                <code className="text-ink font-mono">demo</code>{' '}
+                Try it —{' '}
+                <code className="text-ink font-mono">admin</code>{' '}
                 <span className="text-border">/</span>{' '}
-                <code className="text-ink font-mono">demo123</code>
+                <code className="text-ink font-mono">admin123</code>{' '}
+                (can broadcast) ·{' '}
+                <code className="text-ink font-mono">viewer</code>{' '}
+                <span className="text-border">/</span>{' '}
+                <code className="text-ink font-mono">viewer123</code>{' '}
+                (view only)
               </p>
             </form>
           </div>
