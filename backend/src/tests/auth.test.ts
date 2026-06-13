@@ -371,6 +371,70 @@ describe('POST /api/auth/password-reset/confirm', () => {
   });
 });
 
+describe('POST /api/auth/refresh', () => {
+  async function loginRefreshToken(): Promise<string> {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'admin123' });
+    return res.body.refreshToken as string;
+  }
+
+  it('exchanges a valid refresh token for a new access + refresh pair', async () => {
+    const refreshToken = await loginRefreshToken();
+
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken });
+
+    expect(res.status).toBe(200);
+    expect(res.body.accessToken.split('.')).toHaveLength(3);
+    expect(res.body.refreshToken).toEqual(expect.any(String));
+    // Rotated — the new refresh token is not the one we sent.
+    expect(res.body.refreshToken).not.toBe(refreshToken);
+    expect(res.body.user).toMatchObject({ username: 'admin' });
+  });
+
+  it('rotates: the old token stops working, the new one works', async () => {
+    const oldToken = await loginRefreshToken();
+    const rotated = await request(app).post('/api/auth/refresh').send({ refreshToken: oldToken });
+    const newToken = rotated.body.refreshToken as string;
+
+    // Old token is now revoked.
+    const reuseOld = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: oldToken });
+    expect(reuseOld.status).toBe(401);
+
+    // New token still works.
+    const useNew = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: newToken });
+    expect(useNew.status).toBe(200);
+  });
+
+  it('returns 401 for an unknown refresh token', async () => {
+    const res = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: 'not-a-real-token' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 when refreshToken is missing', async () => {
+    const res = await request(app).post('/api/auth/refresh').send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 401 for an expired refresh token', async () => {
+    const refreshToken = await loginRefreshToken();
+    // Expire the row directly — avoids coupling the test to the hash scheme.
+    await getDb().refreshToken.updateMany({
+      where: { revokedAt: null },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('case-insensitive usernames', () => {
   it('stores a registered username in lowercase', async () => {
     await request(app)

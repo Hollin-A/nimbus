@@ -135,6 +135,27 @@ export async function authenticate(
   };
 }
 
+// Exchanges a refresh token for a fresh access + refresh pair, rotating
+// the refresh token (the presented one is revoked, a new one issued).
+// Returns null — a 401 at the route — if the token is unknown, revoked,
+// expired, or its user is gone. Rotation means a stolen refresh token is
+// usable at most once before it's revoked; reuse detection (commit 3)
+// builds on the revoked branch.
+export async function refreshSession(rawToken: string): Promise<AuthResult | null> {
+  const row = await refreshTokensRepo.findByTokenHash(sha256(rawToken));
+  if (!row || row.revokedAt || row.expiresAt.getTime() < Date.now()) return null;
+
+  const user = await usersRepo.findById(row.userId);
+  if (!user) return null;
+
+  await refreshTokensRepo.revoke(row.id);
+  return {
+    accessToken: signAccessToken(user),
+    refreshToken: await issueRefreshToken(user.id),
+    user: toPublicUser(user),
+  };
+}
+
 function signAccessToken(user: User): string {
   const claims: AuthClaims = { sub: user.id, username: user.username };
   const options: SignOptions = {
