@@ -143,7 +143,18 @@ export async function authenticate(
 // builds on the revoked branch.
 export async function refreshSession(rawToken: string): Promise<AuthResult | null> {
   const row = await refreshTokensRepo.findByTokenHash(sha256(rawToken));
-  if (!row || row.revokedAt || row.expiresAt.getTime() < Date.now()) return null;
+  if (!row) return null;
+
+  // Reuse detection: a token that's already revoked is being replayed.
+  // Rotation revokes a token the moment it's used, so a revoked token in
+  // hand means either a thief replaying a stolen token or the victim
+  // racing the thief — either way the chain is compromised. Revoke the
+  // user's entire token family so both parties must re-authenticate.
+  if (row.revokedAt) {
+    await refreshTokensRepo.revokeAllForUser(row.userId);
+    return null;
+  }
+  if (row.expiresAt.getTime() < Date.now()) return null;
 
   const user = await usersRepo.findById(row.userId);
   if (!user) return null;

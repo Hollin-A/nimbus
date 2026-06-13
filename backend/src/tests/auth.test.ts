@@ -392,22 +392,38 @@ describe('POST /api/auth/refresh', () => {
     expect(res.body.user).toMatchObject({ username: 'admin' });
   });
 
-  it('rotates: the old token stops working, the new one works', async () => {
+  it('rotates: the new token works and the old one is revoked', async () => {
     const oldToken = await loginRefreshToken();
     const rotated = await request(app).post('/api/auth/refresh').send({ refreshToken: oldToken });
     const newToken = rotated.body.refreshToken as string;
 
-    // Old token is now revoked.
-    const reuseOld = await request(app)
-      .post('/api/auth/refresh')
-      .send({ refreshToken: oldToken });
-    expect(reuseOld.status).toBe(401);
-
-    // New token still works.
+    // New token works (assert before touching the old one — reuse of the
+    // old token triggers family revocation under reuse detection).
     const useNew = await request(app)
       .post('/api/auth/refresh')
       .send({ refreshToken: newToken });
     expect(useNew.status).toBe(200);
+
+    // Old token is revoked.
+    const reuseOld = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: oldToken });
+    expect(reuseOld.status).toBe(401);
+  });
+
+  it('reuse detection: replaying a revoked token revokes the whole family', async () => {
+    const r1 = await loginRefreshToken();
+    const rotated = await request(app).post('/api/auth/refresh').send({ refreshToken: r1 });
+    const r2 = rotated.body.refreshToken as string;
+
+    // r1 is already revoked (rotated away). Replaying it is the reuse
+    // signal — a thief or the victim racing a thief.
+    const replay = await request(app).post('/api/auth/refresh').send({ refreshToken: r1 });
+    expect(replay.status).toBe(401);
+
+    // The whole family is now dead: r2, valid a moment ago, is revoked too.
+    const useR2 = await request(app).post('/api/auth/refresh').send({ refreshToken: r2 });
+    expect(useR2.status).toBe(401);
   });
 
   it('returns 401 for an unknown refresh token', async () => {
