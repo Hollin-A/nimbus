@@ -4,6 +4,7 @@ import { AlertCircle } from 'lucide-react';
 import { ApiError, register as apiRegister } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import Wordmark from '../components/Wordmark';
+import PasswordInput from '../components/PasswordInput';
 
 const MIN_PASSWORD = 8;
 
@@ -111,14 +112,12 @@ export default function RegisterPage() {
                 <label htmlFor="password" className="block text-sm font-semibold text-ink">
                   Password
                 </label>
-                <input
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete="new-password"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 w-full rounded-input border border-border bg-white px-3 py-2.5 text-base md:text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  onChange={setPassword}
                 />
                 <p className="mt-1 text-xs text-muted">At least 8 characters.</p>
               </div>

@@ -39,7 +39,7 @@ async function fillValid() {
   renderRegister();
   await user.type(screen.getByLabelText(/username/i), 'newbie');
   await user.type(screen.getByLabelText(/display name/i), 'New Bie');
-  await user.type(screen.getByLabelText(/password/i), 'password123');
+  await user.type(screen.getByLabelText('Password'), 'password123');
   return user;
 }
 
@@ -53,7 +53,7 @@ describe('RegisterPage', () => {
     renderRegister();
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/display name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create account/i })).toBeInTheDocument();
   });
 
@@ -83,7 +83,7 @@ describe('RegisterPage', () => {
     renderRegister();
     await user.type(screen.getByLabelText(/username/i), 'newbie');
     await user.type(screen.getByLabelText(/display name/i), 'New Bie');
-    await user.type(screen.getByLabelText(/password/i), 'short');
+    await user.type(screen.getByLabelText('Password'), 'short');
 
     await user.click(screen.getByRole('button', { name: /create account/i }));
 

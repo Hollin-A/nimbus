@@ -33,7 +33,7 @@ describe('LoginPage', () => {
   it('renders the username field, password field, and Sign-in button', () => {
     renderLogin();
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /sign in/i }),
     ).toBeInTheDocument();
@@ -65,7 +65,7 @@ describe('LoginPage', () => {
     renderLogin();
 
     await user.type(screen.getByLabelText(/username/i), '  demo  ');
-    await user.type(screen.getByLabelText(/password/i), 'demo123');
+    await user.type(screen.getByLabelText('Password'), 'demo123');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     expect(mockLogin).toHaveBeenCalledOnce();
@@ -104,7 +104,7 @@ describe('LoginPage', () => {
     renderLogin();
 
     await user.type(screen.getByLabelText(/username/i), 'demo');
-    await user.type(screen.getByLabelText(/password/i), 'wrong');
+    await user.type(screen.getByLabelText('Password'), 'wrong');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     const alert = await screen.findByRole('alert');
@@ -117,7 +117,7 @@ describe('LoginPage', () => {
     renderLogin();
 
     await user.type(screen.getByLabelText(/username/i), 'demo');
-    await user.type(screen.getByLabelText(/password/i), 'demo');
+    await user.type(screen.getByLabelText('Password'), 'demo');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     const alert = await screen.findByRole('alert');
@@ -130,7 +130,7 @@ describe('LoginPage', () => {
     renderLogin();
 
     await user.type(screen.getByLabelText(/username/i), 'demo');
-    await user.type(screen.getByLabelText(/password/i), 'demo123');
+    await user.type(screen.getByLabelText('Password'), 'demo123');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     const alert = await screen.findByRole('alert');
@@ -146,7 +146,7 @@ describe('LoginPage', () => {
     renderLogin();
 
     await user.type(screen.getByLabelText(/username/i), 'demo');
-    await user.type(screen.getByLabelText(/password/i), 'demo123');
+    await user.type(screen.getByLabelText('Password'), 'demo123');
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     const pendingButton = screen.getByRole('button', { name: /signing in/i });

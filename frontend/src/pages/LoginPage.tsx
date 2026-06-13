@@ -4,6 +4,7 @@ import { AlertCircle } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import Wordmark from '../components/Wordmark';
+import PasswordInput from '../components/PasswordInput';
 
 export default function LoginPage() {
   const { status, login } = useAuth();
@@ -94,14 +95,12 @@ export default function LoginPage() {
                 >
                   Password
                 </label>
-                <input
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete="current-password"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 w-full rounded-input border border-border bg-white px-3 py-2.5 text-base md:text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  onChange={setPassword}
                 />
               </div>
 
