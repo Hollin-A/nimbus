@@ -27,10 +27,14 @@ export async function authenticate(
 ): Promise<AuthResult | null> {
   const user = await usersRepo.findByUsername(username);
   if (!user) {
-    bcrypt.compareSync(password, DUMMY_HASH);
+    // Async compare against a dummy hash so the unknown-username path
+    // costs the same wall-clock as the wrong-password path (anti-
+    // enumeration), without blocking the event loop the way compareSync
+    // would for ~80ms per attempt.
+    await bcrypt.compare(password, DUMMY_HASH);
     return null;
   }
-  const ok = bcrypt.compareSync(password, user.passwordHash);
+  const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return null;
   return {
     token: signToken(user),
