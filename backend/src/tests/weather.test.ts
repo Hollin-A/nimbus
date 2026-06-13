@@ -103,7 +103,7 @@ beforeAll(async () => {
   const login = await request(app)
     .post('/api/auth/login')
     .send({ username: 'admin', password: 'admin123' });
-  token = login.body.token;
+  token = login.body.accessToken;
 });
 afterAll(disconnectDb);
 

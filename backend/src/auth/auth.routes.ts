@@ -172,7 +172,11 @@ router.post('/login', express.json({ limit: '256b' }), async (req: Request, res:
     },
     'login succeeded',
   );
-  res.json({ token: result.token, user: result.user });
+  res.json({
+    accessToken: result.accessToken,
+    refreshToken: result.refreshToken,
+    user: result.user,
+  });
 });
 
 router.get('/me', requireAuth, async (req: Request, res: Response) => {

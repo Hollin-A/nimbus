@@ -20,14 +20,19 @@ beforeEach(async () => {
 afterAll(disconnectDb);
 
 describe('POST /api/auth/login', () => {
-  it('returns 200 with a token and a public user on valid credentials', async () => {
+  it('returns 200 with an access token, a refresh token and a public user', async () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({ username: 'admin', password: 'admin123' });
 
     expect(res.status).toBe(200);
-    expect(res.body.token).toEqual(expect.any(String));
-    expect(res.body.token.length).toBeGreaterThan(20);
+    // Access token: a JWT (three dot-separated segments).
+    expect(res.body.accessToken).toEqual(expect.any(String));
+    expect(res.body.accessToken.split('.')).toHaveLength(3);
+    // Refresh token: a non-empty opaque string, distinct from the access token.
+    expect(res.body.refreshToken).toEqual(expect.any(String));
+    expect(res.body.refreshToken.length).toBeGreaterThan(20);
+    expect(res.body.refreshToken).not.toBe(res.body.accessToken);
     expect(res.body.user).toMatchObject({ username: 'admin' });
     // Never leak the password hash to clients.
     expect(res.body.user).not.toHaveProperty('passwordHash');
@@ -97,7 +102,7 @@ describe('GET /api/auth/me', () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({ username: 'admin', password: 'admin123' });
-    return res.body.token;
+    return res.body.accessToken;
   }
 
   it('returns the current user with a valid bearer token', async () => {
@@ -208,7 +213,7 @@ describe('POST /api/auth/register', () => {
       .send({ username: 'newbie', password: 'password123' });
 
     expect(res.status).toBe(200);
-    expect(res.body.token).toEqual(expect.any(String));
+    expect(res.body.accessToken).toEqual(expect.any(String));
   });
 
   it('returns 409 on a duplicate username', async () => {
