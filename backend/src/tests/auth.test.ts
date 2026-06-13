@@ -1,16 +1,17 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { createApp } from '../app';
 import { config } from '../config';
 import { seed } from '../seed';
+import { usersRepo } from '../auth/users.repo';
 import { truncateAll, disconnectDb } from './helpers/db';
 
 const app = createApp();
 
-// The demo/viewer accounts now live in Postgres — seed them into a clean
-// test database before the login-based specs run.
-beforeAll(async () => {
+// Per-test isolation: the register specs create users, so each test
+// starts from a clean DB re-seeded with just the admin/viewer accounts.
+beforeEach(async () => {
   await truncateAll();
   await seed();
 });
@@ -180,5 +181,71 @@ describe('GET /api/auth/me', () => {
       .set('Authorization', `Bearer ${noneToken}`);
 
     expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /api/auth/register', () => {
+  const VALID = { username: 'newbie', password: 'password123', displayName: 'New Bie' };
+
+  it('returns 201 with the public user on a valid body', async () => {
+    const res = await request(app).post('/api/auth/register').send(VALID);
+
+    expect(res.status).toBe(201);
+    expect(res.body.user).toMatchObject({ username: 'newbie', displayName: 'New Bie' });
+    expect(res.body.user.id).toEqual(expect.any(String));
+    // Never leak the hash; register issues no token (login is a separate step).
+    expect(res.body.user).not.toHaveProperty('passwordHash');
+    expect(res.body).not.toHaveProperty('token');
+  });
+
+  it('lets a newly registered user log in', async () => {
+    await request(app).post('/api/auth/register').send(VALID);
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'newbie', password: 'password123' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.token).toEqual(expect.any(String));
+  });
+
+  it('returns 409 on a duplicate username', async () => {
+    await request(app).post('/api/auth/register').send(VALID);
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ ...VALID, displayName: 'Someone Else' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 400 when the username is missing', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ password: 'password123', displayName: 'New Bie' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when the password is shorter than 8 characters', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'shorty', password: 'short', displayName: 'Shorty' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when displayName is missing', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ username: 'nodisplay', password: 'password123' });
+    expect(res.status).toBe(400);
+  });
+
+  it('ignores a role in the body — registration cannot self-elevate', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ ...VALID, username: 'sneaky', role: 'admin' });
+
+    expect(res.status).toBe(201);
+    const stored = await usersRepo.findByUsername('sneaky');
+    expect(stored?.role).toBe('user');
   });
 });
