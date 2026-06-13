@@ -49,7 +49,7 @@ describe('LoginPage', () => {
 
   it('links to register and password reset', () => {
     renderLogin();
-    expect(screen.getByRole('link', { name: /create account/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /create one/i })).toHaveAttribute(
       'href',
       '/register',
     );

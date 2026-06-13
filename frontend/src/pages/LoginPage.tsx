@@ -102,6 +102,14 @@ export default function LoginPage() {
                   value={password}
                   onChange={setPassword}
                 />
+                <div className="mt-1.5 text-right">
+                  <Link
+                    to="/reset"
+                    className="text-sm font-semibold text-brand hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
 
               {error && (
@@ -122,25 +130,32 @@ export default function LoginPage() {
                 {submitting ? 'Signing in…' : 'Sign in'}
               </button>
 
-              <div className="flex items-center justify-between text-sm">
-                <Link to="/register" className="text-brand font-semibold hover:underline">
-                  Create account
-                </Link>
-                <Link to="/reset" className="text-brand font-semibold hover:underline">
-                  Forgot password?
-                </Link>
+              <div className="rounded-input border border-border bg-surface-2 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  Demo accounts
+                </p>
+                <p className="mt-1.5 text-sm text-body">
+                  <code className="text-ink font-mono">admin</code>{' '}
+                  <span className="text-border">/</span>{' '}
+                  <code className="text-ink font-mono">admin123</code>
+                  <span className="text-muted"> — full access</span>
+                </p>
+                <p className="mt-0.5 text-sm text-body">
+                  <code className="text-ink font-mono">viewer</code>{' '}
+                  <span className="text-border">/</span>{' '}
+                  <code className="text-ink font-mono">viewer123</code>
+                  <span className="text-muted"> — view only</span>
+                </p>
               </div>
 
               <p className="text-sm text-muted text-center">
-                Try it —{' '}
-                <code className="text-ink font-mono">admin</code>{' '}
-                <span className="text-border">/</span>{' '}
-                <code className="text-ink font-mono">admin123</code>{' '}
-                (can broadcast) ·{' '}
-                <code className="text-ink font-mono">viewer</code>{' '}
-                <span className="text-border">/</span>{' '}
-                <code className="text-ink font-mono">viewer123</code>{' '}
-                (view only)
+                Don’t have an account?{' '}
+                <Link
+                  to="/register"
+                  className="text-brand font-semibold hover:underline"
+                >
+                  Create one
+                </Link>
               </p>
             </form>
           </div>
