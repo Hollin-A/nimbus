@@ -1,9 +1,12 @@
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { createHash, randomBytes } from 'node:crypto';
 import type { User } from '@prisma/client';
 import { config } from '../config';
 import type { PublicUser } from '../types';
 import { usersRepo, toPublicUser } from './users.repo';
+import { passwordResetTokensRepo } from './password-reset-tokens.repo';
+import { refreshTokensRepo } from './refresh-tokens.repo';
 
 export interface AuthResult {
   token: string;
@@ -35,6 +38,62 @@ export async function registerUser(
   const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
   const user = await usersRepo.create({ username, passwordHash, displayName });
   return toPublicUser(user);
+}
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// Reset tokens are high-entropy random values, so a fast sha256 is enough
+// to store them safely (unlike low-entropy passwords, which need bcrypt).
+function hashResetToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+export interface PasswordResetIssued {
+  token: string;
+  expiresAt: Date;
+}
+
+// Issues a single-use reset token for a known user, or null if no such
+// user (the route turns null into a 404).
+//
+// Deliberately NOT enumeration-resistant, unlike authenticate(): the
+// 404 reveals whether an account exists. That's unavoidable once we
+// return the raw token in the response — an enumeration-safe design
+// needs a constant response and an out-of-band channel (email). With no
+// mail service and no private data in this demo, we accept the leak and
+// surface the trade-off in the UI. Production would email the token and
+// return a constant 200. Only the hash is persisted.
+export async function requestPasswordReset(
+  username: string,
+): Promise<PasswordResetIssued | null> {
+  const user = await usersRepo.findByUsername(username);
+  if (!user) return null;
+
+  const token = randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+  await passwordResetTokensRepo.create({
+    tokenHash: hashResetToken(token),
+    userId: user.id,
+    expiresAt,
+  });
+  return { token, expiresAt };
+}
+
+// Consumes a reset token: returns false if it's unknown, already used or
+// expired; otherwise updates the password, marks the token used, and
+// revokes the user's refresh tokens (a password change ends other
+// sessions). Single-use is enforced by markUsed + the usedAt check.
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<boolean> {
+  const row = await passwordResetTokensRepo.findByTokenHash(hashResetToken(token));
+  if (!row || row.usedAt || row.expiresAt.getTime() < Date.now()) return false;
+
+  await usersRepo.updatePassword(row.userId, await bcrypt.hash(newPassword, BCRYPT_COST));
+  await passwordResetTokensRepo.markUsed(row.id);
+  await refreshTokensRepo.revokeAllForUser(row.userId);
+  return true;
 }
 
 export async function authenticate(
