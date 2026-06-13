@@ -15,11 +15,27 @@ export interface AuthClaims {
   username: string;
 }
 
+const BCRYPT_COST = 10;
+
 // A real-format bcrypt hash for a value nobody knows. Used to keep the
 // "unknown username" code path roughly the same wall-clock cost as the
 // "wrong password" path — a cheap defence against username enumeration
 // via timing. Hashed at module load (one-off ~80ms cost).
-const DUMMY_HASH = bcrypt.hashSync('not-a-real-password-timing-shim', 10);
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password-timing-shim', BCRYPT_COST);
+
+// Creates a user with the default `user` role — privilege is never
+// self-assigned. Propagates DuplicateUsernameError (the route maps it
+// to 409). Returns the client-safe shape; registration issues no
+// session, so the caller logs in separately.
+export async function registerUser(
+  username: string,
+  password: string,
+  displayName: string,
+): Promise<PublicUser> {
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+  const user = await usersRepo.create({ username, passwordHash, displayName });
+  return toPublicUser(user);
+}
 
 export async function authenticate(
   username: string,
