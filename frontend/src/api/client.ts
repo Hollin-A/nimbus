@@ -130,6 +130,17 @@ export function getMe(token: string): Promise<{ user: PublicUser }> {
   return request<{ user: PublicUser }>('/api/auth/me', { token });
 }
 
+export function register(
+  username: string,
+  password: string,
+  displayName: string,
+): Promise<{ user: PublicUser }> {
+  return request<{ user: PublicUser }>('/api/auth/register', {
+    method: 'POST',
+    body: { username, password, displayName },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Weather
 // ---------------------------------------------------------------------------
