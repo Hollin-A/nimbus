@@ -48,9 +48,7 @@ export const usersRepo = {
     return getDb().user.findUnique({ where: { id } });
   },
 
-  // Skeleton — spec lands first (red); implemented next commit. Consumer
-  // is the password-reset confirm flow.
-  async updatePassword(_id: string, _passwordHash: string): Promise<void> {
-    throw new Error('not implemented');
+  async updatePassword(id: string, passwordHash: string): Promise<void> {
+    await getDb().user.update({ where: { id }, data: { passwordHash } });
   },
 };

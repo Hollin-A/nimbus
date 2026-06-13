@@ -1,4 +1,5 @@
 import type { PasswordResetToken } from '@prisma/client';
+import { getDb } from '../db';
 
 export interface CreatePasswordResetTokenInput {
   tokenHash: string;
@@ -6,18 +7,19 @@ export interface CreatePasswordResetTokenInput {
   expiresAt: Date;
 }
 
-// Skeleton — the spec in tests/passwordResetTokensRepo.test.ts lands
-// first (red); the next commit implements these over Prisma.
 export const passwordResetTokensRepo = {
-  async create(_input: CreatePasswordResetTokenInput): Promise<PasswordResetToken> {
-    throw new Error('not implemented');
+  async create(input: CreatePasswordResetTokenInput): Promise<PasswordResetToken> {
+    return getDb().passwordResetToken.create({ data: input });
   },
 
-  async findByTokenHash(_tokenHash: string): Promise<PasswordResetToken | null> {
-    throw new Error('not implemented');
+  async findByTokenHash(tokenHash: string): Promise<PasswordResetToken | null> {
+    return getDb().passwordResetToken.findUnique({ where: { tokenHash } });
   },
 
-  async markUsed(_id: string): Promise<void> {
-    throw new Error('not implemented');
+  async markUsed(id: string): Promise<void> {
+    await getDb().passwordResetToken.update({
+      where: { id },
+      data: { usedAt: new Date() },
+    });
   },
 };
