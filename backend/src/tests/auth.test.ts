@@ -451,6 +451,37 @@ describe('POST /api/auth/refresh', () => {
   });
 });
 
+describe('POST /api/auth/logout', () => {
+  async function loginRefreshToken(): Promise<string> {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'admin123' });
+    return res.body.refreshToken as string;
+  }
+
+  it('revokes the refresh token so it can no longer refresh', async () => {
+    const refreshToken = await loginRefreshToken();
+
+    const out = await request(app).post('/api/auth/logout').send({ refreshToken });
+    expect(out.status).toBe(200);
+
+    const refresh = await request(app).post('/api/auth/refresh').send({ refreshToken });
+    expect(refresh.status).toBe(401);
+  });
+
+  it('is idempotent — logging out an unknown token still returns 200', async () => {
+    const out = await request(app)
+      .post('/api/auth/logout')
+      .send({ refreshToken: 'never-existed' });
+    expect(out.status).toBe(200);
+  });
+
+  it('returns 400 when refreshToken is missing', async () => {
+    const out = await request(app).post('/api/auth/logout').send({});
+    expect(out.status).toBe(400);
+  });
+});
+
 describe('case-insensitive usernames', () => {
   it('stores a registered username in lowercase', async () => {
     await request(app)

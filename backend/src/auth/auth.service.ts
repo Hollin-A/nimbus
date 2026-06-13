@@ -167,6 +167,17 @@ export async function refreshSession(rawToken: string): Promise<AuthResult | nul
   };
 }
 
+// Revokes the presented refresh token. Idempotent — an unknown or
+// already-revoked token is a no-op, so logout always "succeeds" from the
+// client's side. No access token required: it may well be expired, and
+// the refresh token is the credential being torn down.
+export async function logout(rawToken: string): Promise<void> {
+  const row = await refreshTokensRepo.findByTokenHash(sha256(rawToken));
+  if (row && !row.revokedAt) {
+    await refreshTokensRepo.revoke(row.id);
+  }
+}
+
 function signAccessToken(user: User): string {
   const claims: AuthClaims = { sub: user.id, username: user.username };
   const options: SignOptions = {

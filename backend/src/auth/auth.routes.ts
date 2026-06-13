@@ -6,6 +6,7 @@ import {
   requestPasswordReset,
   confirmPasswordReset,
   refreshSession,
+  logout,
 } from './auth.service';
 import { requireAuth } from './auth.middleware';
 import { usersRepo, toPublicUser, DuplicateUsernameError } from './users.repo';
@@ -205,6 +206,27 @@ router.post(
         refreshToken: result.refreshToken,
         user: result.user,
       });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// Revokes the current refresh token. Idempotent (200 even for an unknown
+// token); no requireAuth — see logout() for why.
+router.post(
+  '/logout',
+  express.json({ limit: '512b' }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    const parsed = refreshSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid request body' });
+      return;
+    }
+    try {
+      await logout(parsed.data.refreshToken);
+      req.log.info({ event: 'auth.logout', ip: req.ip }, 'logged out');
+      res.status(200).json({ ok: true });
     } catch (err) {
       next(err);
     }
