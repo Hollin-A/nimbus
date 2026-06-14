@@ -8,6 +8,7 @@ export function toPublicUser(user: User): PublicUser {
     id: user.id,
     username: user.username,
     displayName: user.displayName,
+    role: user.role,
   };
 }
 
