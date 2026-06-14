@@ -27,7 +27,10 @@ export default function AppShell() {
           <Link to="/" aria-label="Nimbus home" className="-mx-2 px-2 py-1">
             <Wordmark />
           </Link>
-          <nav className="hidden md:flex items-center gap-6 text-sm">
+          <nav
+            aria-label="Primary"
+            className="hidden md:flex items-center gap-6 text-sm"
+          >
             {navLinks.map((link) => (
               <NavLink
                 key={link.to}
