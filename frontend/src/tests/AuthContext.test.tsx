@@ -141,4 +141,88 @@ describe('AuthProvider', () => {
     expect(mockGetMe).toHaveBeenCalledWith('saved-access');
     expect(screen.getByTestId('user')).toHaveTextContent('admin');
   });
+
+  // --- Cross-tab sync via the `storage` event ----------------------------
+  // The browser fires a `storage` event in *other* tabs when localStorage
+  // changes. We use it to keep tabs consistent: log out everywhere when one
+  // tab logs out, and adopt a rotated token pair so a refresh in one tab
+  // doesn't leave the others holding a now-revoked refresh token.
+
+  it('logs out when another tab clears the token (no redundant server revoke)', async () => {
+    mockLogin.mockResolvedValue(SESSION);
+    await loginThrough();
+
+    // Another tab removed the token, which arrives here as a storage event
+    // with a null newValue.
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'nimbus.token',
+          oldValue: 'access-1',
+          newValue: null,
+        }),
+      );
+    });
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anon'));
+    // The other tab already revoked server-side — we must not call it again.
+    expect(mockLogout).not.toHaveBeenCalled();
+  });
+
+  it('adopts a token pair rotated by another tab so the next refresh uses it', async () => {
+    mockLogin.mockResolvedValue(SESSION);
+    mockRefresh.mockResolvedValue({
+      accessToken: 'access-10',
+      refreshToken: 'refresh-10',
+      user: ADMIN,
+    });
+    await loginThrough();
+
+    // Another tab refreshed: it wrote a fresh pair to localStorage, which
+    // fires a storage event here.
+    localStorage.setItem('nimbus.token', 'access-9');
+    localStorage.setItem('nimbus.refresh', 'refresh-9');
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'nimbus.token',
+          oldValue: 'access-1',
+          newValue: 'access-9',
+        }),
+      );
+    });
+
+    // The visible access token updates and we stay authed.
+    await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('access-9'));
+    expect(screen.getByTestId('status')).toHaveTextContent('authed');
+
+    // Crucially, a later refresh uses the *synced* refresh token, not the
+    // stale one — otherwise reuse-detection would log every tab out.
+    await act(async () => {
+      await captured.handler?.();
+    });
+    expect(mockRefresh).toHaveBeenCalledWith('refresh-9');
+  });
+
+  it('does not adopt a session when another tab logs in (logout-only sync)', async () => {
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anon'));
+
+    // A login in another tab writes a token, but we deliberately do not
+    // mirror a fresh sign-in across tabs.
+    localStorage.setItem('nimbus.token', 'access-x');
+    localStorage.setItem('nimbus.refresh', 'refresh-x');
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'nimbus.token',
+          oldValue: null,
+          newValue: 'access-x',
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('status')).toHaveTextContent('anon');
+    expect(screen.getByTestId('token')).toHaveTextContent('none');
+  });
 });
