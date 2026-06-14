@@ -271,11 +271,13 @@ export interface PushMessageInput {
 export function pushMessage(
   body: PushMessageInput,
   token: string,
+  options?: { signal?: AbortSignal },
 ): Promise<{ message: LiveMessage }> {
   return request<{ message: LiveMessage }>('/api/messages', {
     method: 'POST',
     body,
     token,
+    signal: options?.signal,
   });
 }
 

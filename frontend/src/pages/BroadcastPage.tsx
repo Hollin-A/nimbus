@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { ApiError, pushMessage } from '../api/client';
@@ -21,6 +21,9 @@ export default function BroadcastPage() {
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
 
+  // Tracks the in-flight submit so it can be cancelled if the page unmounts.
+  const abortRef = useRef<AbortController | null>(null);
+
   // Auto-dismiss the success confirmation.
   useEffect(() => {
     if (!confirmation) return;
@@ -30,6 +33,10 @@ export default function BroadcastPage() {
     );
     return () => clearTimeout(handle);
   }, [confirmation]);
+
+  // Abort any in-flight broadcast if the operator navigates away mid-send,
+  // so the request is cancelled and no state update lands after unmount.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   // Broadcasting is admin-only. Redirect a non-admin who reaches the route
   // directly (the nav doesn't surface it to them). Placed after all hooks
@@ -50,6 +57,9 @@ export default function BroadcastPage() {
     event.preventDefault();
     if (!canSubmit || !token || !targetCity) return;
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setSubmitting(true);
     setError(null);
     setConfirmation(null);
@@ -64,6 +74,7 @@ export default function BroadcastPage() {
           severity,
         },
         token,
+        { signal: controller.signal },
       );
       const where = targetCity.country
         ? `${targetCity.name}, ${targetCity.country}`
@@ -73,6 +84,8 @@ export default function BroadcastPage() {
       // fire follow-ups to the same place quickly.
       setMessage('');
     } catch (err) {
+      // Cancelled by an unmount — the component may be gone; don't touch state.
+      if (controller.signal.aborted) return;
       if (err instanceof ApiError) {
         if (err.status === 400) {
           setError('That broadcast is invalid. Check the city and message.');
@@ -83,6 +96,10 @@ export default function BroadcastPage() {
           // a role demoted mid-session could land here before the next
           // refresh redirects them.
           setError('You do not have permission to broadcast.');
+        } else if (err.status === 429) {
+          setError(
+            "You're sending broadcasts too quickly — try again in a moment.",
+          );
         } else {
           setError(err.message);
         }
@@ -90,7 +107,7 @@ export default function BroadcastPage() {
         setError('Could not reach the server.');
       }
     } finally {
-      setSubmitting(false);
+      if (!controller.signal.aborted) setSubmitting(false);
     }
   }
 
@@ -110,79 +127,86 @@ export default function BroadcastPage() {
         </p>
 
         <form onSubmit={handleSubmit} className="mt-10 max-w-xl space-y-5">
-          <div>
-            <span className="block text-sm font-semibold text-ink mb-1">
-              Target city
-            </span>
-            {targetCity ? (
-              <div className="flex items-center justify-between rounded-input border border-border bg-white px-3 py-2.5">
-                <div className="text-sm">
-                  <span className="font-semibold text-ink">
-                    {targetCity.name}
-                  </span>
-                  {targetCity.country && (
-                    <span className="ml-2 text-muted">
-                      {targetCity.country}
-                    </span>
-                  )}
-                  <span className="ml-3 text-xs text-muted">
-                    {targetCity.latitude.toFixed(2)},{' '}
-                    {targetCity.longitude.toFixed(2)}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setTargetCity(null)}
-                  aria-label="Clear selected city"
-                  className="text-muted hover:text-ink transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <CitySearch
-                recentCities={[]}
-                onSelect={(city) => setTargetCity(city)}
-              />
-            )}
-          </div>
-
-          <div>
-            <div className="flex items-baseline justify-between">
-              <label
-                htmlFor="message"
-                className="block text-sm font-semibold text-ink"
-              >
-                Message
-              </label>
-              <span
-                className={`text-xs ${remaining < 0 ? 'text-severity-alert-text' : 'text-muted'}`}
-                aria-live="polite"
-              >
-                {remaining} / {MAX_MESSAGE_LENGTH}
+          {/* Lock every input while a send is in flight — the operator must
+              not be able to change the payload out from under the request. */}
+          <fieldset
+            disabled={submitting}
+            className="space-y-5 border-0 p-0 m-0 min-w-0"
+          >
+            <div>
+              <span className="block text-sm font-semibold text-ink mb-1">
+                Target city
               </span>
+              {targetCity ? (
+                <div className="flex items-center justify-between rounded-input border border-border bg-white px-3 py-2.5">
+                  <div className="text-sm">
+                    <span className="font-semibold text-ink">
+                      {targetCity.name}
+                    </span>
+                    {targetCity.country && (
+                      <span className="ml-2 text-muted">
+                        {targetCity.country}
+                      </span>
+                    )}
+                    <span className="ml-3 text-xs text-muted">
+                      {targetCity.latitude.toFixed(2)},{' '}
+                      {targetCity.longitude.toFixed(2)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTargetCity(null)}
+                    aria-label="Clear selected city"
+                    className="text-muted hover:text-ink transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <CitySearch
+                  recentCities={[]}
+                  onSelect={(city) => setTargetCity(city)}
+                />
+              )}
             </div>
-            <textarea
-              id="message"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Flash flood warning — avoid low-lying roads."
-              rows={4}
-              maxLength={MAX_MESSAGE_LENGTH}
-              required
-              className="mt-1 w-full rounded-input border border-border bg-white px-3 py-2.5 text-base md:text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 resize-none"
-            />
-          </div>
 
-          <div>
-            <span
-              id="severity-label"
-              className="block text-sm font-semibold text-ink mb-2"
-            >
-              Severity
-            </span>
-            <SeveritySelect value={severity} onChange={setSeverity} />
-          </div>
+            <div>
+              <div className="flex items-baseline justify-between">
+                <label
+                  htmlFor="message"
+                  className="block text-sm font-semibold text-ink"
+                >
+                  Message
+                </label>
+                <span
+                  className={`text-xs ${remaining < 0 ? 'text-severity-alert-text' : 'text-muted'}`}
+                  aria-live="polite"
+                >
+                  {remaining} / {MAX_MESSAGE_LENGTH}
+                </span>
+              </div>
+              <textarea
+                id="message"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Flash flood warning — avoid low-lying roads."
+                rows={4}
+                maxLength={MAX_MESSAGE_LENGTH}
+                required
+                className="mt-1 w-full rounded-input border border-border bg-white px-3 py-2.5 text-base md:text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 resize-none"
+              />
+            </div>
+
+            <div>
+              <span
+                id="severity-label"
+                className="block text-sm font-semibold text-ink mb-2"
+              >
+                Severity
+              </span>
+              <SeveritySelect value={severity} onChange={setSeverity} />
+            </div>
+          </fieldset>
 
           {error && (
             <div
