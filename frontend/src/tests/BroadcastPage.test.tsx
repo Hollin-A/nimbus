@@ -30,13 +30,32 @@ vi.mock('../api/client', async (importActual) => {
 });
 
 // Stub CitySearch to a one-click picker so the submit tests don't depend on
-// its debounced-search machinery (covered by its own tests).
-const TEST_CITY = { name: 'Lisbon', country: 'PT', latitude: 38.72, longitude: -9.13 };
+// its debounced-search machinery (covered by its own tests). It also echoes
+// the recentCities it's handed, so we can assert what the page passes down.
+type TestCity = { name: string; country?: string; latitude: number; longitude: number };
+const TEST_CITY: TestCity = { name: 'Lisbon', country: 'PT', latitude: 38.72, longitude: -9.13 };
 vi.mock('../components/CitySearch', () => ({
-  default: ({ onSelect }: { onSelect: (c: typeof TEST_CITY) => void }) => (
-    <button type="button" onClick={() => onSelect(TEST_CITY)}>
-      pick test city
-    </button>
+  default: ({
+    recentCities,
+    onSelect,
+  }: {
+    recentCities: TestCity[];
+    onSelect: (c: TestCity) => void;
+  }) => (
+    <div>
+      <button type="button" onClick={() => onSelect(TEST_CITY)}>
+        pick test city
+      </button>
+      <ul>
+        {recentCities.map((c) => (
+          <li key={`${c.latitude},${c.longitude}`}>
+            <button type="button" onClick={() => onSelect(c)}>
+              {c.name}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   ),
 }));
 
@@ -137,5 +156,50 @@ describe('BroadcastPage submit robustness', () => {
 
     unmount();
     expect(captured?.signal?.aborted).toBe(true);
+  });
+});
+
+describe('BroadcastPage recent targets', () => {
+  beforeEach(() => {
+    mockRole.current = 'admin';
+    mockPushMessage.mockReset();
+    localStorage.clear();
+  });
+
+  it('offers recently broadcast-to cities from storage', () => {
+    const prior = { name: 'Porto', country: 'PT', latitude: 41.15, longitude: -8.61 };
+    localStorage.setItem('nimbus.broadcast-targets', JSON.stringify([prior]));
+    renderBroadcast();
+    expect(screen.getByRole('button', { name: 'Porto' })).toBeInTheDocument();
+  });
+
+  it('remembers a target city after a successful broadcast', async () => {
+    mockPushMessage.mockResolvedValue({ message: {} });
+    const user = userEvent.setup();
+    renderBroadcast();
+    await fillBroadcast(user);
+
+    await user.click(screen.getByRole('button', { name: /send broadcast/i }));
+
+    await waitFor(() => {
+      const stored = JSON.parse(
+        localStorage.getItem('nimbus.broadcast-targets') ?? '[]',
+      );
+      expect(stored[0]).toMatchObject({ name: 'Lisbon' });
+    });
+  });
+
+  it('does not mix broadcast targets with the home page viewed-cities list', async () => {
+    mockPushMessage.mockResolvedValue({ message: {} });
+    const user = userEvent.setup();
+    renderBroadcast();
+    await fillBroadcast(user);
+    await user.click(screen.getByRole('button', { name: /send broadcast/i }));
+
+    await waitFor(() =>
+      expect(localStorage.getItem('nimbus.broadcast-targets')).not.toBeNull(),
+    );
+    // The viewed-cities key HomePage uses must stay untouched.
+    expect(localStorage.getItem('nimbus.recentCities')).toBeNull();
   });
 });
