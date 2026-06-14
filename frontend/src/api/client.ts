@@ -162,8 +162,14 @@ export function login(username: string, password: string): Promise<AuthTokens> {
   });
 }
 
-export function getMe(token: string): Promise<{ user: PublicUser }> {
-  return request<{ user: PublicUser }>('/api/auth/me', { token });
+export function getMe(
+  token: string,
+  options?: { signal?: AbortSignal },
+): Promise<{ user: PublicUser }> {
+  return request<{ user: PublicUser }>('/api/auth/me', {
+    token,
+    signal: options?.signal,
+  });
 }
 
 export interface AuthTokens {

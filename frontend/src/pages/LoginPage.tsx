@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { useAuth } from '../auth/useAuth';
@@ -13,7 +13,12 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (status === 'authed') return <Navigate to="/" replace />;
+  // Return the user to wherever ProtectedRoute bounced them from (it
+  // stashes the attempted location in state.from), falling back to home.
+  const location = useLocation();
+  const from =
+    (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/';
+  if (status === 'authed') return <Navigate to={from} replace />;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
