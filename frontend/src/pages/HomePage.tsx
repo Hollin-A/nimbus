@@ -9,13 +9,16 @@ import {
   WeatherEmpty,
   WeatherErrorCard,
   WeatherLoading,
+  WeatherOffline,
 } from '../components/WeatherCard';
 import { loadRecent, saveRecent } from '../lib/recentCities';
+import { useOnline } from '../lib/useOnline';
 import { useCityMessages } from '../socket/useLiveMessages';
 import type { City, Weather } from '../types';
 
 export default function HomePage() {
   const { token } = useAuth();
+  const online = useOnline();
   const [recent, setRecent] = useState<City[]>(() => loadRecent());
   const [selectedCity, setSelectedCity] = useState<City | null>(
     () => loadRecent()[0] ?? null,
@@ -32,7 +35,9 @@ export default function HomePage() {
   } = useCityMessages(selectedCity);
 
   useEffect(() => {
-    if (!selectedCity || !token) return;
+    // Don't fire a request that's doomed to fail while offline — the offline
+    // state below explains the gap. Re-runs when connectivity returns.
+    if (!selectedCity || !token || !online) return;
     // Abort the previous city's fetch when this effect re-runs (city change)
     // or unmounts, so rapid switching doesn't pile up concurrent requests.
     const controller = new AbortController();
@@ -56,7 +61,7 @@ export default function HomePage() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [selectedCity, token, refetchKey]);
+  }, [selectedCity, token, refetchKey, online]);
 
   function handleSelectCity(city: City) {
     setSelectedCity(city);
@@ -84,14 +89,15 @@ export default function HomePage() {
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           <div className="md:col-span-2">
             {!selectedCity && <WeatherEmpty />}
-            {selectedCity && loading && <WeatherLoading />}
-            {selectedCity && error && !loading && (
+            {selectedCity && !online && <WeatherOffline />}
+            {selectedCity && online && loading && <WeatherLoading />}
+            {selectedCity && online && error && !loading && (
               <WeatherErrorCard
                 message={error}
                 onRetry={() => setRefetchKey((k) => k + 1)}
               />
             )}
-            {selectedCity && weather && !loading && !error && (
+            {selectedCity && online && weather && !loading && !error && (
               <WeatherCard weather={weather} />
             )}
           </div>
