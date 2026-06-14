@@ -13,6 +13,9 @@ import { AuthContext, type AuthContextValue, type AuthStatus } from './context';
 const ACCESS_TOKEN_KEY = 'nimbus.token';
 const REFRESH_TOKEN_KEY = 'nimbus.refresh';
 
+// How often an authed tab pokes /me to keep the session honest.
+const ME_PING_INTERVAL_MS = 5 * 60 * 1000;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null); // access token
@@ -112,6 +115,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
+
+  // While authed, poll /me on an interval. A refreshable-but-expired access
+  // token gets renewed (getMe goes through the client's 401→refresh path),
+  // and a session that has died server-side surfaces within one interval —
+  // the refresh handler tears it down — instead of waiting for the user's
+  // next action. Transient failures are swallowed; the handler owns teardown.
+  useEffect(() => {
+    if (status !== 'authed') return;
+    const id = setInterval(() => {
+      const access = localStorage.getItem(ACCESS_TOKEN_KEY);
+      if (!access) return;
+      void getMe(access)
+        .then(({ user }) => setUser(user))
+        .catch(() => {});
+    }, ME_PING_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [status]);
 
   async function login(username: string, password: string): Promise<void> {
     const result = await apiLogin(username, password);
