@@ -52,14 +52,18 @@ export function useCityMessages(city: City | null): UseCityMessagesResult {
       setHistoryError(null);
       return;
     }
-    let cancelled = false;
+    // Abort the previous city's history fetch when the city changes or the
+    // hook unmounts, so switching cities doesn't race concurrent requests.
+    const controller = new AbortController();
     setHistoryError(null);
     setHistory([]);
     setLatest(null);
 
-    getMessageHistory({ latitude, longitude }, token)
+    getMessageHistory({ latitude, longitude }, token, {
+      signal: controller.signal,
+    })
       .then(({ messages }) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         // Preserve any socket-pushed messages that arrived before the REST
         // history landed — dedupe by id.
         setHistory((prev) => {
@@ -69,7 +73,7 @@ export function useCityMessages(city: City | null): UseCityMessagesResult {
         });
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setHistoryError(
           err instanceof ApiError
             ? 'Could not load past alerts.'
@@ -77,9 +81,7 @@ export function useCityMessages(city: City | null): UseCityMessagesResult {
         );
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [latitude, longitude, token]);
 
   // Socket room join / live-message subscription.

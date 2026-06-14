@@ -1,4 +1,4 @@
-import { AlertCircle, Cloud } from 'lucide-react';
+import { AlertCircle, Cloud, CloudOff } from 'lucide-react';
 import type { Weather } from '../types';
 import MetricTile from './MetricTile';
 import WeatherGlyph from './WeatherGlyph';
@@ -57,6 +57,17 @@ export function WeatherEmpty() {
     <div className="rounded-card border border-dashed border-border p-10 text-center">
       <Cloud className="mx-auto h-10 w-10 text-muted" aria-hidden="true" />
       <p className="mt-4 text-body">Pick a city to see the weather.</p>
+    </div>
+  );
+}
+
+export function WeatherOffline() {
+  return (
+    <div className="rounded-card border border-dashed border-border p-10 text-center">
+      <CloudOff className="mx-auto h-10 w-10 text-muted" aria-hidden="true" />
+      <p className="mt-4 text-body">
+        You're offline. The weather will load when your connection is back.
+      </p>
     </div>
   );
 }

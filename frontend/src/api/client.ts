@@ -244,6 +244,7 @@ export function searchCities(
 export function getWeather(
   city: City,
   token: string,
+  options?: { signal?: AbortSignal },
 ): Promise<{ weather: Weather }> {
   const params = new URLSearchParams({
     lat: String(city.latitude),
@@ -253,6 +254,7 @@ export function getWeather(
   if (city.country) params.set('country', city.country);
   return request<{ weather: Weather }>(`/api/weather?${params.toString()}`, {
     token,
+    signal: options?.signal,
   });
 }
 
@@ -284,9 +286,10 @@ export function pushMessage(
 export function getMessageHistory(
   city: { latitude: number; longitude: number },
   token: string,
+  options?: { signal?: AbortSignal },
 ): Promise<{ messages: LiveMessage[] }> {
   return request<{ messages: LiveMessage[] }>(
     `/api/messages?latitude=${city.latitude}&longitude=${city.longitude}`,
-    { token },
+    { token, signal: options?.signal },
   );
 }
