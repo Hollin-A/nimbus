@@ -165,16 +165,22 @@ describe('historyQuerySchema', () => {
 // ---------------------------------------------------------------------------
 
 const app = createApp();
-let token: string;
+let token: string; // admin
+let viewerToken: string; // role: user
 
 beforeAll(async () => {
-  // demo/viewer live in Postgres now — seed a clean test DB, then log in.
+  // The seeded accounts live in Postgres — seed a clean test DB, then log
+  // in as both an admin (can broadcast) and a viewer (cannot).
   await truncateAll();
   await seed();
-  const login = await request(app)
+  const adminLogin = await request(app)
     .post('/api/auth/login')
     .send({ username: 'admin', password: 'admin123' });
-  token = login.body.accessToken;
+  token = adminLogin.body.accessToken;
+  const viewerLogin = await request(app)
+    .post('/api/auth/login')
+    .send({ username: 'viewer', password: 'viewer123' });
+  viewerToken = viewerLogin.body.accessToken;
 });
 afterAll(disconnectDb);
 
@@ -191,6 +197,20 @@ describe('POST /api/messages', () => {
       severity: 'info',
     });
     expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for an authenticated non-admin (broadcasting is admin-only)', async () => {
+    const res = await request(app)
+      .post('/api/messages')
+      .set('Authorization', `Bearer ${viewerToken}`)
+      .send({
+        city: 'Melbourne',
+        ...MELBOURNE_AU,
+        message: 'Storm warning',
+        severity: 'alert',
+      });
+
+    expect(res.status).toBe(403);
   });
 
   it('returns 201 with the stored message on valid input', async () => {

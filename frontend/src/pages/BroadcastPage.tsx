@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Navigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { ApiError, pushMessage } from '../api/client';
 import { useAuth } from '../auth/useAuth';
@@ -11,7 +12,7 @@ const MAX_MESSAGE_LENGTH = 280;
 const CONFIRMATION_TIMEOUT_MS = 4_000;
 
 export default function BroadcastPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const online = useOnline();
   const [targetCity, setTargetCity] = useState<City | null>(null);
   const [message, setMessage] = useState('');
@@ -29,6 +30,12 @@ export default function BroadcastPage() {
     );
     return () => clearTimeout(handle);
   }, [confirmation]);
+
+  // Broadcasting is admin-only. Redirect a non-admin who reaches the route
+  // directly (the nav doesn't surface it to them). Placed after all hooks
+  // so the hook order stays stable; the server's requireRole is the real
+  // gate. Checked after hooks per the rules of hooks.
+  if (user?.role !== 'admin') return <Navigate to="/" replace />;
 
   const remaining = MAX_MESSAGE_LENGTH - message.length;
   const canSubmit =
@@ -71,6 +78,11 @@ export default function BroadcastPage() {
           setError('That broadcast is invalid. Check the city and message.');
         } else if (err.status === 401) {
           setError('Your session has expired. Sign in again.');
+        } else if (err.status === 403) {
+          // Defensive — the route guard normally keeps non-admins away, but
+          // a role demoted mid-session could land here before the next
+          // refresh redirects them.
+          setError('You do not have permission to broadcast.');
         } else {
           setError(err.message);
         }

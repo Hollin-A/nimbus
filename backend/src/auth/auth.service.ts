@@ -1,7 +1,7 @@
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
-import type { User } from '@prisma/client';
+import type { Role, User } from '@prisma/client';
 import { config } from '../config';
 import type { PublicUser } from '../types';
 import { usersRepo, toPublicUser } from './users.repo';
@@ -17,6 +17,7 @@ export interface AuthResult {
 export interface AuthClaims {
   sub: string; // user id
   username: string;
+  role: Role;
 }
 
 const BCRYPT_COST = 10;
@@ -179,7 +180,7 @@ export async function logout(rawToken: string): Promise<void> {
 }
 
 function signAccessToken(user: User): string {
-  const claims: AuthClaims = { sub: user.id, username: user.username };
+  const claims: AuthClaims = { sub: user.id, username: user.username, role: user.role };
   const options: SignOptions = {
     expiresIn: config.jwtExpiresIn as SignOptions['expiresIn'],
   };
@@ -201,7 +202,11 @@ export function verifyToken(token: string): AuthClaims | null {
     if (typeof payload.sub !== 'string' || typeof payload.username !== 'string') {
       return null;
     }
-    return { sub: payload.sub, username: payload.username };
+    // Require a valid role claim. A pre-role token (issued before this
+    // shipped) is rejected → 401 → the client's transparent refresh mints
+    // a fresh token carrying the role. No forced logout.
+    if (payload.role !== 'admin' && payload.role !== 'user') return null;
+    return { sub: payload.sub, username: payload.username, role: payload.role };
   } catch {
     return null;
   }

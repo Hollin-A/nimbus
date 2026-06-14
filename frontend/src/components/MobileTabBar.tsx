@@ -1,5 +1,6 @@
 import { Home, Megaphone } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../auth/useAuth';
 
 const TABS = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -11,8 +12,15 @@ const TABS = [
  * and runs in standalone mode — a bottom bar makes the experience read as a
  * real app rather than a responsive website. `env(safe-area-inset-bottom)`
  * keeps the bar above iOS's home-indicator gesture area.
+ *
+ * Broadcasting is admin-only, so for a non-admin the only destination is
+ * Home — and a one-tab bar is pointless. Hide the bar entirely; the page
+ * content is full-height on its own.
  */
 export default function MobileTabBar() {
+  const { user } = useAuth();
+  if (user?.role !== 'admin') return null;
+
   return (
     <nav
       aria-label="Primary"

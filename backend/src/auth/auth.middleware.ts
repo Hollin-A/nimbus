@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import type { Role } from '@prisma/client';
 import { verifyToken, type AuthClaims } from './auth.service';
 
 // Augment Express's Request so req.auth is typed everywhere downstream.
@@ -38,4 +39,33 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
   req.auth = claims;
   next();
+}
+
+// Authorization guard — layered AFTER requireAuth, which has already set
+// req.auth from the verified token. Reads the role straight off the JWT
+// claims (no DB hit). 401 means "not authenticated"; 403 means
+// "authenticated but insufficient role" — a distinction the client needs,
+// since a 401 is refreshable and a 403 is not.
+export function requireRole(role: Role) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.auth) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    if (req.auth.role !== role) {
+      req.log.warn(
+        {
+          event: 'auth.forbidden',
+          userId: req.auth.sub,
+          required: role,
+          actual: req.auth.role,
+          ip: req.ip,
+        },
+        'forbidden',
+      );
+      res.status(403).json({ error: 'Insufficient permissions' });
+      return;
+    }
+    next();
+  };
 }

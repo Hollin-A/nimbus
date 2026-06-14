@@ -7,13 +7,18 @@ import MobileTabBar from './MobileTabBar';
 import Wordmark from './Wordmark';
 
 const NAV_LINKS = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/broadcast', label: 'Broadcast', end: false },
+  { to: '/', label: 'Home', end: true, adminOnly: false },
+  { to: '/broadcast', label: 'Broadcast', end: false, adminOnly: true },
 ] as const;
 
 export default function AppShell() {
   const { user, logout } = useAuth();
   const connectionStatus = useConnectionStatus();
+
+  // Broadcasting is admin-only — drop the link for everyone else.
+  const navLinks = NAV_LINKS.filter(
+    (link) => !link.adminOnly || user?.role === 'admin',
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-white text-ink">
@@ -23,7 +28,7 @@ export default function AppShell() {
             <Wordmark />
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm">
-            {NAV_LINKS.map((link) => (
+            {navLinks.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}

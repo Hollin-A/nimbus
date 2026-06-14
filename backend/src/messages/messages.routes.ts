@@ -1,5 +1,5 @@
 import express, { Router, type Request, type Response } from 'express';
-import { requireAuth } from '../auth/auth.middleware';
+import { requireAuth, requireRole } from '../auth/auth.middleware';
 import { broadcastMessage } from '../realtime/socket';
 import { messagesRepo } from './messages.repo';
 import { historyQuerySchema, messageInputSchema } from './messages.schema';
@@ -13,6 +13,7 @@ const router = Router();
 router.post(
   '/',
   requireAuth,
+  requireRole('admin'), // broadcasting is admin-only
   express.json({ limit: '1kb' }),
   async (req: Request, res: Response) => {
     const parsed = messageInputSchema.safeParse(req.body);
