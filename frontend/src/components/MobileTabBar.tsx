@@ -34,7 +34,7 @@ export default function MobileTabBar() {
               to={to}
               end={end}
               className={({ isActive }) =>
-                `flex flex-col items-center justify-center gap-1 py-2.5 text-xs font-semibold transition-colors ${
+                `flex flex-col items-center justify-center gap-1 py-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40 ${
                   isActive ? 'text-brand' : 'text-muted hover:text-ink'
                 }`
               }
