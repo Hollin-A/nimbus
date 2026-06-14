@@ -67,7 +67,9 @@ export default function SeveritySelect({
         return;
     }
     event.preventDefault();
-    onChange(OPTIONS[next].value);
+    const target = OPTIONS[next];
+    if (!target) return;
+    onChange(target.value);
     buttonsRef.current[next]?.focus();
   }
 
