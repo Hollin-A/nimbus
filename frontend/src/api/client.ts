@@ -286,9 +286,10 @@ export function pushMessage(
 export function getMessageHistory(
   city: { latitude: number; longitude: number },
   token: string,
+  options?: { signal?: AbortSignal },
 ): Promise<{ messages: LiveMessage[] }> {
   return request<{ messages: LiveMessage[] }>(
     `/api/messages?latitude=${city.latitude}&longitude=${city.longitude}`,
-    { token },
+    { token, signal: options?.signal },
   );
 }
