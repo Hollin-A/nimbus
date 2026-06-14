@@ -15,6 +15,8 @@ const REFRESH_TOKEN_KEY = 'nimbus.refresh';
 
 // How often an authed tab pokes /me to keep the session honest.
 const ME_PING_INTERVAL_MS = 5 * 60 * 1000;
+// Cap how long the splash screen can block on a session restore.
+const REHYDRATE_TIMEOUT_MS = 10 * 1000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(null);
@@ -75,9 +77,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     refreshTokenRef.current = localStorage.getItem(REFRESH_TOKEN_KEY);
     let cancelled = false;
+    // Don't let a hung backend strand the app on the splash screen: abort the
+    // restore after a bounded wait and fall back to anonymous.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REHYDRATE_TIMEOUT_MS);
     (async () => {
       try {
-        const { user } = await getMe(savedAccess);
+        const { user } = await getMe(savedAccess, { signal: controller.signal });
         if (cancelled) return;
         setUser(user);
         setToken(localStorage.getItem(ACCESS_TOKEN_KEY));
@@ -85,10 +91,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         if (cancelled) return;
         clearSession();
+      } finally {
+        clearTimeout(timeout);
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort();
+      clearTimeout(timeout);
     };
   }, []);
 
