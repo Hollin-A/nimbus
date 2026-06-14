@@ -4,7 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import HomePage from '../pages/HomePage';
 
-const { mockGetWeather } = vi.hoisted(() => ({ mockGetWeather: vi.fn() }));
+const { mockGetWeather, mockOnline } = vi.hoisted(() => ({
+  mockGetWeather: vi.fn(),
+  mockOnline: { value: true },
+}));
+
+vi.mock('../lib/useOnline', () => ({ useOnline: () => mockOnline.value }));
 
 vi.mock('../auth/useAuth', () => ({
   useAuth: () => ({
@@ -55,7 +60,22 @@ function renderHome() {
 describe('HomePage weather fetch', () => {
   beforeEach(() => {
     mockGetWeather.mockReset();
+    // Default to an in-flight fetch so a stray call doesn't reject; tests that
+    // care override this.
+    mockGetWeather.mockReturnValue(new Promise<never>(() => {}));
+    mockOnline.value = true;
     localStorage.clear();
+  });
+
+  it('skips the weather fetch and shows an offline state when offline', async () => {
+    mockOnline.value = false;
+    const user = userEvent.setup();
+    renderHome();
+
+    await user.click(screen.getByRole('button', { name: 'select A' }));
+
+    expect(mockGetWeather).not.toHaveBeenCalled();
+    expect(screen.getByText(/offline/i)).toBeInTheDocument();
   });
 
   it('aborts the previous weather fetch when the city changes', async () => {
