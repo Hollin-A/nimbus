@@ -4,10 +4,10 @@ import { useAuth } from '../auth/useAuth';
 import CitySearch from '../components/CitySearch';
 import MessageHistory from '../components/MessageHistory';
 import ToastHost from '../components/ToastHost';
+import StatusBanner from '../components/StatusBanner';
 import {
   WeatherCard,
   WeatherEmpty,
-  WeatherErrorCard,
   WeatherLoading,
   WeatherOffline,
 } from '../components/WeatherCard';
@@ -92,7 +92,8 @@ export default function HomePage() {
             {selectedCity && !online && <WeatherOffline />}
             {selectedCity && online && loading && <WeatherLoading />}
             {selectedCity && online && error && !loading && (
-              <WeatherErrorCard
+              <StatusBanner
+                kind="error"
                 message={error}
                 onRetry={() => setRefetchKey((k) => k + 1)}
               />

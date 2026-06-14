@@ -1,4 +1,4 @@
-import { AlertCircle, Cloud, CloudOff } from 'lucide-react';
+import { Cloud, CloudOff } from 'lucide-react';
 import type { Weather } from '../types';
 import MetricTile from './MetricTile';
 import WeatherGlyph from './WeatherGlyph';
@@ -98,26 +98,3 @@ export function WeatherLoading() {
   );
 }
 
-interface WeatherErrorProps {
-  message: string;
-  onRetry: () => void;
-}
-
-export function WeatherErrorCard({ message, onRetry }: WeatherErrorProps) {
-  return (
-    <div className="rounded-card border border-border bg-white p-6 text-center">
-      <AlertCircle
-        className="mx-auto h-8 w-8 text-severity-alert-text"
-        aria-hidden="true"
-      />
-      <p className="mt-3 text-body">{message}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="mt-4 rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white hover:bg-brand-hover transition-colors"
-      >
-        Try again
-      </button>
-    </div>
-  );
-}

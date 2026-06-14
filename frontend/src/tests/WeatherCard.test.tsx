@@ -1,10 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import {
   WeatherCard,
   WeatherEmpty,
-  WeatherErrorCard,
   WeatherLoading,
 } from '../components/WeatherCard';
 import type { Weather } from '../types';
@@ -86,29 +84,5 @@ describe('WeatherLoading', () => {
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(
       0,
     );
-  });
-});
-
-describe('WeatherErrorCard', () => {
-  it('renders the supplied error message', () => {
-    render(
-      <WeatherErrorCard
-        message="Could not load the weather for that city."
-        onRetry={() => {}}
-      />,
-    );
-    expect(
-      screen.getByText(/could not load the weather for that city/i),
-    ).toBeInTheDocument();
-  });
-
-  it('fires onRetry when the Try-again button is clicked', async () => {
-    const onRetry = vi.fn();
-    const user = userEvent.setup();
-    render(<WeatherErrorCard message="oops" onRetry={onRetry} />);
-
-    await user.click(screen.getByRole('button', { name: /try again/i }));
-
-    expect(onRetry).toHaveBeenCalledOnce();
   });
 });
