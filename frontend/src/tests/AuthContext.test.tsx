@@ -67,7 +67,10 @@ describe('AuthProvider', () => {
     mockLogout.mockReset();
     mockRefresh.mockReset();
   });
-  afterEach(() => localStorage.clear());
+  afterEach(() => {
+    localStorage.clear();
+    vi.useRealTimers();
+  });
 
   it('starts anonymous with no saved token', async () => {
     renderAuth();
@@ -224,5 +227,75 @@ describe('AuthProvider', () => {
 
     expect(screen.getByTestId('status')).toHaveTextContent('anon');
     expect(screen.getByTestId('token')).toHaveTextContent('none');
+  });
+
+  // --- Periodic /me ping -------------------------------------------------
+  // While authed, poll /me on an interval so a session that has gone dead
+  // server-side surfaces on its own (and a refreshable access token is
+  // renewed) instead of waiting for the user's next action.
+
+  it('pings /me on a repeating interval while authed', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem('nimbus.token', 'saved-access');
+    localStorage.setItem('nimbus.refresh', 'saved-refresh');
+    mockGetMe.mockResolvedValue({ user: ADMIN });
+
+    renderAuth();
+
+    // Flush the rehydrate promise chain (no timers involved) → authed, with
+    // one getMe from the rehydrate itself.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('status')).toHaveTextContent('authed');
+    expect(mockGetMe).toHaveBeenCalledTimes(1);
+
+    // Each interval fires one more ping.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    });
+    expect(mockGetMe).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    });
+    expect(mockGetMe).toHaveBeenCalledTimes(3);
+  });
+
+  it('stops pinging /me once the session ends', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem('nimbus.token', 'saved-access');
+    localStorage.setItem('nimbus.refresh', 'saved-refresh');
+    mockGetMe.mockResolvedValue({ user: ADMIN });
+
+    renderAuth();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // rehydrate (1) + one interval (2)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    });
+    expect(mockGetMe).toHaveBeenCalledTimes(2);
+
+    // End the session (another tab logged out → status flips to anon). The
+    // interval effect should tear down and stop polling.
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'nimbus.token',
+          oldValue: 'saved-access',
+          newValue: null,
+        }),
+      );
+    });
+    expect(screen.getByTestId('status')).toHaveTextContent('anon');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    });
+    expect(mockGetMe).toHaveBeenCalledTimes(2); // no further pings
   });
 });
