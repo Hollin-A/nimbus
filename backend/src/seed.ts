@@ -7,7 +7,7 @@ const BCRYPT_COST = 10;
 // Two demo accounts whose usernames signal their role, so the
 // role-restricted experience is demonstrable straight from the README:
 // `admin` gets the full experience (can broadcast); `viewer` shows what
-// a plain user sees once broadcasting is admin-only (workstream 2.4).
+// a plain user sees once broadcasting is gated to admins.
 const SEED_ACCOUNTS = [
   { username: 'admin', password: 'admin123', displayName: 'Admin', role: 'admin' as const },
   { username: 'viewer', password: 'viewer123', displayName: 'Viewer', role: 'user' as const },

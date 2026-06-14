@@ -1,10 +1,9 @@
 import type { RefreshToken } from '@prisma/client';
 import { getDb } from '../db';
 
-// Dormant until workstream 2.3 (refresh tokens & session lifecycle) —
-// every method has a named consumer there: create (issue at login),
-// findByTokenHash (the /refresh lookup; only hashes are stored, never
-// the token itself), revoke (rotation + logout), revokeAllForUser (the
+// Backs the session lifecycle: create (issue a refresh token at login),
+// findByTokenHash (the /refresh lookup; only hashes are stored, never the
+// token itself), revoke (rotation + logout), revokeAllForUser (the
 // reuse-detection response: a revoked token presented again kills the
 // whole family).
 
