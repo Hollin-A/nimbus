@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useReducer, useRef, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { ApiError, pushMessage } from '../api/client';
@@ -11,15 +11,91 @@ import type { City, Severity } from '../types';
 const MAX_MESSAGE_LENGTH = 280;
 const CONFIRMATION_TIMEOUT_MS = 4_000;
 
+// The submit lifecycle as a discriminated union, so impossible combinations
+// — submitting while an error shows, or an error and a confirmation at once —
+// are unrepresentable rather than merely avoided by careful setState order.
+type Submit =
+  | { status: 'idle' }
+  | { status: 'submitting' }
+  | { status: 'success'; confirmation: string }
+  | { status: 'error'; message: string };
+
+interface FormState {
+  city: City | null;
+  message: string;
+  severity: Severity;
+  submit: Submit;
+}
+
+type Action =
+  | { type: 'setCity'; city: City | null }
+  | { type: 'setMessage'; message: string }
+  | { type: 'setSeverity'; severity: Severity }
+  | { type: 'submitStart' }
+  | { type: 'submitSuccess'; confirmation: string }
+  | { type: 'submitError'; message: string }
+  | { type: 'dismissConfirmation' };
+
+const initialState: FormState = {
+  city: null,
+  message: '',
+  severity: 'info',
+  submit: { status: 'idle' },
+};
+
+function reducer(state: FormState, action: Action): FormState {
+  switch (action.type) {
+    case 'setCity':
+      return { ...state, city: action.city };
+    case 'setMessage':
+      return { ...state, message: action.message };
+    case 'setSeverity':
+      return { ...state, severity: action.severity };
+    case 'submitStart':
+      return { ...state, submit: { status: 'submitting' } };
+    case 'submitSuccess':
+      // Clear the message but keep city + severity so the operator can fire
+      // follow-ups to the same place quickly.
+      return {
+        ...state,
+        message: '',
+        submit: { status: 'success', confirmation: action.confirmation },
+      };
+    case 'submitError':
+      return { ...state, submit: { status: 'error', message: action.message } };
+    case 'dismissConfirmation':
+      return state.submit.status === 'success'
+        ? { ...state, submit: { status: 'idle' } }
+        : state;
+  }
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 400) {
+      return 'That broadcast is invalid. Check the city and message.';
+    }
+    if (err.status === 401) return 'Your session has expired. Sign in again.';
+    // Defensive — the route guard normally keeps non-admins away, but a role
+    // demoted mid-session could land here before the next refresh redirects.
+    if (err.status === 403) return 'You do not have permission to broadcast.';
+    if (err.status === 429) {
+      return "You're sending broadcasts too quickly — try again in a moment.";
+    }
+    return err.message;
+  }
+  return 'Could not reach the server.';
+}
+
 export default function BroadcastPage() {
   const { token, user } = useAuth();
   const online = useOnline();
-  const [targetCity, setTargetCity] = useState<City | null>(null);
-  const [message, setMessage] = useState('');
-  const [severity, setSeverity] = useState<Severity>('info');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const { city: targetCity, message, severity, submit } = state;
+
+  const submitting = submit.status === 'submitting';
+  const error = submit.status === 'error' ? submit.message : null;
+  const confirmation = submit.status === 'success' ? submit.confirmation : null;
 
   // Tracks the in-flight submit so it can be cancelled if the page unmounts.
   const abortRef = useRef<AbortController | null>(null);
@@ -28,7 +104,7 @@ export default function BroadcastPage() {
   useEffect(() => {
     if (!confirmation) return;
     const handle = setTimeout(
-      () => setConfirmation(null),
+      () => dispatch({ type: 'dismissConfirmation' }),
       CONFIRMATION_TIMEOUT_MS,
     );
     return () => clearTimeout(handle);
@@ -59,10 +135,7 @@ export default function BroadcastPage() {
 
     const controller = new AbortController();
     abortRef.current = controller;
-
-    setSubmitting(true);
-    setError(null);
-    setConfirmation(null);
+    dispatch({ type: 'submitStart' });
 
     try {
       await pushMessage(
@@ -79,35 +152,14 @@ export default function BroadcastPage() {
       const where = targetCity.country
         ? `${targetCity.name}, ${targetCity.country}`
         : targetCity.name;
-      setConfirmation(`Broadcast sent to ${where}.`);
-      // Clear the message but keep city + severity so the operator can
-      // fire follow-ups to the same place quickly.
-      setMessage('');
+      dispatch({
+        type: 'submitSuccess',
+        confirmation: `Broadcast sent to ${where}.`,
+      });
     } catch (err) {
       // Cancelled by an unmount — the component may be gone; don't touch state.
       if (controller.signal.aborted) return;
-      if (err instanceof ApiError) {
-        if (err.status === 400) {
-          setError('That broadcast is invalid. Check the city and message.');
-        } else if (err.status === 401) {
-          setError('Your session has expired. Sign in again.');
-        } else if (err.status === 403) {
-          // Defensive — the route guard normally keeps non-admins away, but
-          // a role demoted mid-session could land here before the next
-          // refresh redirects them.
-          setError('You do not have permission to broadcast.');
-        } else if (err.status === 429) {
-          setError(
-            "You're sending broadcasts too quickly — try again in a moment.",
-          );
-        } else {
-          setError(err.message);
-        }
-      } else {
-        setError('Could not reach the server.');
-      }
-    } finally {
-      if (!controller.signal.aborted) setSubmitting(false);
+      dispatch({ type: 'submitError', message: errorMessage(err) });
     }
   }
 
@@ -155,7 +207,7 @@ export default function BroadcastPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setTargetCity(null)}
+                    onClick={() => dispatch({ type: 'setCity', city: null })}
                     aria-label="Clear selected city"
                     className="text-muted hover:text-ink transition-colors"
                   >
@@ -165,7 +217,7 @@ export default function BroadcastPage() {
               ) : (
                 <CitySearch
                   recentCities={[]}
-                  onSelect={(city) => setTargetCity(city)}
+                  onSelect={(city) => dispatch({ type: 'setCity', city })}
                 />
               )}
             </div>
@@ -188,7 +240,9 @@ export default function BroadcastPage() {
               <textarea
                 id="message"
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={(e) =>
+                  dispatch({ type: 'setMessage', message: e.target.value })
+                }
                 placeholder="Flash flood warning — avoid low-lying roads."
                 rows={4}
                 maxLength={MAX_MESSAGE_LENGTH}
@@ -204,7 +258,12 @@ export default function BroadcastPage() {
               >
                 Severity
               </span>
-              <SeveritySelect value={severity} onChange={setSeverity} />
+              <SeveritySelect
+                value={severity}
+                onChange={(value) =>
+                  dispatch({ type: 'setSeverity', severity: value })
+                }
+              />
             </div>
           </fieldset>
 
