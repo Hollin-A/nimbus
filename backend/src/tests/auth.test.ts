@@ -33,7 +33,7 @@ describe('POST /api/auth/login', () => {
     expect(res.body.refreshToken).toEqual(expect.any(String));
     expect(res.body.refreshToken.length).toBeGreaterThan(20);
     expect(res.body.refreshToken).not.toBe(res.body.accessToken);
-    expect(res.body.user).toMatchObject({ username: 'admin' });
+    expect(res.body.user).toMatchObject({ username: 'admin', role: 'admin' });
     // Never leak the password hash to clients.
     expect(res.body.user).not.toHaveProperty('passwordHash');
     expect(res.body.user).not.toHaveProperty('password');
