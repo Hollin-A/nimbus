@@ -83,6 +83,10 @@ export default function BroadcastPage() {
           // a role demoted mid-session could land here before the next
           // refresh redirects them.
           setError('You do not have permission to broadcast.');
+        } else if (err.status === 429) {
+          setError(
+            "You're sending broadcasts too quickly — try again in a moment.",
+          );
         } else {
           setError(err.message);
         }
