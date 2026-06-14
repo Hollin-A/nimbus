@@ -1,10 +1,11 @@
 import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { ApiError, pushMessage } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import CitySearch from '../components/CitySearch';
 import SeveritySelect from '../components/SeveritySelect';
+import StatusBanner from '../components/StatusBanner';
 import { useOnline } from '../lib/useOnline';
 import {
   BROADCAST_TARGETS_KEY,
@@ -281,24 +282,10 @@ export default function BroadcastPage() {
             </div>
           </fieldset>
 
-          {error && (
-            <div
-              role="alert"
-              className="flex items-start gap-2 rounded-input bg-severity-alert-bg p-3 text-severity-alert-text text-sm"
-            >
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
+          {error && <StatusBanner kind="error" message={error} />}
 
           {confirmation && (
-            <div
-              role="status"
-              className="flex items-start gap-2 rounded-input bg-green-50 border border-green-200 p-3 text-green-700 text-sm"
-            >
-              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{confirmation}</span>
-            </div>
+            <StatusBanner kind="success" message={confirmation} />
           )}
 
           <button

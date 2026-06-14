@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { ApiError, confirmPasswordReset } from '../api/client';
 import Wordmark from '../components/Wordmark';
 import PasswordInput from '../components/PasswordInput';
+import StatusBanner from '../components/StatusBanner';
 
 const MIN_PASSWORD = 8;
 
@@ -65,13 +65,10 @@ export default function PasswordResetConfirmPage() {
 
           {done ? (
             <div className="mt-6 space-y-4">
-              <div
-                role="status"
-                className="flex items-start gap-2 rounded-input bg-severity-info-bg p-3 text-severity-info-text text-sm"
-              >
-                <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>Your password has been updated. Sign in with your new password.</span>
-              </div>
+              <StatusBanner
+                kind="success"
+                message="Your password has been updated. Sign in with your new password."
+              />
               <Link
                 to="/login"
                 className="inline-block w-full rounded-full bg-brand py-3 text-center font-semibold text-white hover:bg-brand-hover transition-colors"
@@ -108,15 +105,7 @@ export default function PasswordResetConfirmPage() {
                 <p className="mt-1 text-xs text-muted">At least 8 characters.</p>
               </div>
 
-              {error && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-input bg-severity-alert-bg p-3 text-severity-alert-text text-sm"
-                >
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
+              {error && <StatusBanner kind="error" message={error} />}
 
               <button
                 type="submit"

@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import Wordmark from '../components/Wordmark';
 import PasswordInput from '../components/PasswordInput';
+import StatusBanner from '../components/StatusBanner';
 
 export default function LoginPage() {
   const { status, sessionExpired, login } = useAuth();
@@ -76,11 +76,11 @@ export default function LoginPage() {
           {/* Form */}
           <div className="w-full max-w-md md:justify-self-end">
             {sessionExpired && (
-              <div
-                role="status"
-                className="mb-4 rounded-input bg-severity-info-bg p-3 text-severity-info-text text-sm"
-              >
-                Your session expired. Please sign in again.
+              <div className="mb-4">
+                <StatusBanner
+                  kind="info"
+                  message="Your session expired. Please sign in again."
+                />
               </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-5" noValidate>
@@ -125,15 +125,7 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {error && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-input bg-severity-alert-bg p-3 text-severity-alert-text text-sm"
-                >
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
+              {error && <StatusBanner kind="error" message={error} />}
 
               <button
                 type="submit"

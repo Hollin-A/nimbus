@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Info } from 'lucide-react';
+import { Info } from 'lucide-react';
+import StatusBanner from '../components/StatusBanner';
 import {
   ApiError,
   requestPasswordReset,
@@ -106,15 +107,7 @@ export default function PasswordResetRequestPage() {
                 />
               </div>
 
-              {error && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-input bg-severity-alert-bg p-3 text-severity-alert-text text-sm"
-                >
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
+              {error && <StatusBanner kind="error" message={error} />}
 
               <button
                 type="submit"
