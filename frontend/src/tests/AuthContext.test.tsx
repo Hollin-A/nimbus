@@ -141,7 +141,9 @@ describe('AuthProvider', () => {
     renderAuth();
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('authed'));
-    expect(mockGetMe).toHaveBeenCalledWith('saved-access');
+    expect(mockGetMe).toHaveBeenCalledWith('saved-access', {
+      signal: expect.any(AbortSignal),
+    });
     expect(screen.getByTestId('user')).toHaveTextContent('admin');
   });
 
@@ -297,5 +299,39 @@ describe('AuthProvider', () => {
       await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
     });
     expect(mockGetMe).toHaveBeenCalledTimes(2); // no further pings
+  });
+
+  // --- Bounded session restore ------------------------------------------
+  // A hung backend must not strand the app on the splash screen. The
+  // rehydrate aborts after ~10s and falls back to anonymous.
+
+  it('falls back to anonymous if session restore hangs past the timeout', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem('nimbus.token', 'saved-access');
+    localStorage.setItem('nimbus.refresh', 'saved-refresh');
+    // Mirror the real client: hang until the caller's signal aborts.
+    mockGetMe.mockImplementation(
+      (_token: string, options?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('aborted', 'AbortError')),
+          );
+        }),
+    );
+
+    renderAuth();
+
+    // Still on the splash screen before the timeout (Consumer not yet shown).
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByText('loading')).toBeInTheDocument();
+
+    // Advance past the ~10s restore timeout → abort → anonymous.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 1000);
+    });
+    expect(screen.getByTestId('status')).toHaveTextContent('anon');
+    expect(localStorage.getItem('nimbus.token')).toBeNull();
   });
 });
