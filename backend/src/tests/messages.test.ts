@@ -174,7 +174,7 @@ beforeAll(async () => {
   const login = await request(app)
     .post('/api/auth/login')
     .send({ username: 'admin', password: 'admin123' });
-  token = login.body.token;
+  token = login.body.accessToken;
 });
 afterAll(disconnectDb);
 
@@ -484,7 +484,7 @@ describe('Socket.IO real-time layer', () => {
     const login = await request(socketApp)
       .post('/api/auth/login')
       .send({ username: 'admin', password: 'admin123' });
-    socketToken = login.body.token;
+    socketToken = login.body.accessToken;
   });
 
   afterAll(async () => {

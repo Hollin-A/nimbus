@@ -5,7 +5,7 @@ const configSchema = z.object({
   PORT: z.coerce.number().int().min(0).max(65535).default(4000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   JWT_SECRET: z.string().min(1).default('dev-only-change-me'),
-  JWT_EXPIRES_IN: z.string().min(1).default('2h'),
+  JWT_EXPIRES_IN: z.string().min(1).default('15m'),
   CORS_ORIGIN: z.string().url().default('http://localhost:5173'),
 });
 

@@ -38,9 +38,36 @@ interface RequestOptions {
    * as a network failure.
    */
   signal?: AbortSignal;
+  /**
+   * Internal: set on the retry after a transparent token refresh, so a
+   * retry that also 401s doesn't loop forever.
+   */
+  retried?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+
+// --- Transparent refresh seam ---------------------------------------------
+// The auth layer registers a handler that performs ONE token refresh and
+// returns the new access token (or throws if the session can't be
+// refreshed). request() invokes it on a 401 and retries the original call.
+type RefreshHandler = () => Promise<string>;
+let refreshHandler: RefreshHandler | null = null;
+export function setRefreshHandler(handler: RefreshHandler | null): void {
+  refreshHandler = handler;
+}
+
+// Single-flight: a page load fires several requests, which can all 401 at
+// once. They must share ONE refresh rather than stampede the endpoint.
+let refreshInFlight: Promise<string> | null = null;
+function refreshOnce(): Promise<string> {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshHandler!().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};
@@ -97,6 +124,23 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     const body = payload as
       | { error?: string; details?: Record<string, string[]> }
       | null;
+
+    // Transparent refresh: an expired access token (401) on an
+    // authenticated call triggers a single shared refresh, then a one-time
+    // retry with the new token. Guarded so an unauthenticated 401, a
+    // missing handler, or a retry that also 401s doesn't loop.
+    if (response.status === 401 && opts.token && refreshHandler && !opts.retried) {
+      let newToken: string | null = null;
+      try {
+        newToken = await refreshOnce();
+      } catch {
+        newToken = null; // refresh failed — fall through to surface the 401
+      }
+      if (newToken) {
+        return request<T>(path, { ...opts, token: newToken, retried: true });
+      }
+    }
+
     throw new ApiError(
       body?.error ?? `Request failed with status ${response.status}`,
       response.status,
@@ -111,16 +155,8 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 // Auth
 // ---------------------------------------------------------------------------
 
-export interface LoginResponse {
-  token: string;
-  user: PublicUser;
-}
-
-export function login(
-  username: string,
-  password: string,
-): Promise<LoginResponse> {
-  return request<LoginResponse>('/api/auth/login', {
+export function login(username: string, password: string): Promise<AuthTokens> {
+  return request<AuthTokens>('/api/auth/login', {
     method: 'POST',
     body: { username, password },
   });
@@ -128,6 +164,26 @@ export function login(
 
 export function getMe(token: string): Promise<{ user: PublicUser }> {
   return request<{ user: PublicUser }>('/api/auth/me', { token });
+}
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  user: PublicUser;
+}
+
+export function refreshTokens(refreshToken: string): Promise<AuthTokens> {
+  return request<AuthTokens>('/api/auth/refresh', {
+    method: 'POST',
+    body: { refreshToken },
+  });
+}
+
+export function logout(refreshToken: string): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>('/api/auth/logout', {
+    method: 'POST',
+    body: { refreshToken },
+  });
 }
 
 export function register(

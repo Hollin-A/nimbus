@@ -5,6 +5,8 @@ import {
   registerUser,
   requestPasswordReset,
   confirmPasswordReset,
+  refreshSession,
+  logout,
 } from './auth.service';
 import { requireAuth } from './auth.middleware';
 import { usersRepo, toPublicUser, DuplicateUsernameError } from './users.repo';
@@ -31,6 +33,7 @@ const registerSchema = z.object({
 const resetRequestSchema = z.object({
   username: z.string().trim().toLowerCase().min(1),
 });
+const refreshSchema = z.object({ refreshToken: z.string().min(1) });
 const resetConfirmSchema = z.object({
   token: z.string().min(1),
   password: z.string().min(8).max(72),
@@ -172,8 +175,63 @@ router.post('/login', express.json({ limit: '256b' }), async (req: Request, res:
     },
     'login succeeded',
   );
-  res.json({ token: result.token, user: result.user });
+  res.json({
+    accessToken: result.accessToken,
+    refreshToken: result.refreshToken,
+    user: result.user,
+  });
 });
+
+// Exchanges a refresh token for a fresh access + refresh pair (rotation).
+// No requireAuth: the access token is expected to be expired by the time
+// the client calls this — the refresh token is the credential.
+router.post(
+  '/refresh',
+  express.json({ limit: '512b' }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    const parsed = refreshSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid request body' });
+      return;
+    }
+    try {
+      const result = await refreshSession(parsed.data.refreshToken);
+      if (!result) {
+        res.status(401).json({ error: 'Invalid or expired refresh token' });
+        return;
+      }
+      req.log.info({ event: 'auth.refresh', userId: result.user.id, ip: req.ip }, 'token refreshed');
+      res.status(200).json({
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        user: result.user,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// Revokes the current refresh token. Idempotent (200 even for an unknown
+// token); no requireAuth — see logout() for why.
+router.post(
+  '/logout',
+  express.json({ limit: '512b' }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    const parsed = refreshSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid request body' });
+      return;
+    }
+    try {
+      await logout(parsed.data.refreshToken);
+      req.log.info({ event: 'auth.logout', ip: req.ip }, 'logged out');
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 router.get('/me', requireAuth, async (req: Request, res: Response) => {
   const claims = req.auth;

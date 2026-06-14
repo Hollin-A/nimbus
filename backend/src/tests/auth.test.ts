@@ -20,14 +20,19 @@ beforeEach(async () => {
 afterAll(disconnectDb);
 
 describe('POST /api/auth/login', () => {
-  it('returns 200 with a token and a public user on valid credentials', async () => {
+  it('returns 200 with an access token, a refresh token and a public user', async () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({ username: 'admin', password: 'admin123' });
 
     expect(res.status).toBe(200);
-    expect(res.body.token).toEqual(expect.any(String));
-    expect(res.body.token.length).toBeGreaterThan(20);
+    // Access token: a JWT (three dot-separated segments).
+    expect(res.body.accessToken).toEqual(expect.any(String));
+    expect(res.body.accessToken.split('.')).toHaveLength(3);
+    // Refresh token: a non-empty opaque string, distinct from the access token.
+    expect(res.body.refreshToken).toEqual(expect.any(String));
+    expect(res.body.refreshToken.length).toBeGreaterThan(20);
+    expect(res.body.refreshToken).not.toBe(res.body.accessToken);
     expect(res.body.user).toMatchObject({ username: 'admin' });
     // Never leak the password hash to clients.
     expect(res.body.user).not.toHaveProperty('passwordHash');
@@ -97,7 +102,7 @@ describe('GET /api/auth/me', () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({ username: 'admin', password: 'admin123' });
-    return res.body.token;
+    return res.body.accessToken;
   }
 
   it('returns the current user with a valid bearer token', async () => {
@@ -208,7 +213,7 @@ describe('POST /api/auth/register', () => {
       .send({ username: 'newbie', password: 'password123' });
 
     expect(res.status).toBe(200);
-    expect(res.body.token).toEqual(expect.any(String));
+    expect(res.body.accessToken).toEqual(expect.any(String));
   });
 
   it('returns 409 on a duplicate username', async () => {
@@ -363,6 +368,117 @@ describe('POST /api/auth/password-reset/confirm', () => {
 
     const rt = await refreshTokensRepo.findByTokenHash('rt-hash');
     expect(rt?.revokedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('POST /api/auth/refresh', () => {
+  async function loginRefreshToken(): Promise<string> {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'admin123' });
+    return res.body.refreshToken as string;
+  }
+
+  it('exchanges a valid refresh token for a new access + refresh pair', async () => {
+    const refreshToken = await loginRefreshToken();
+
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken });
+
+    expect(res.status).toBe(200);
+    expect(res.body.accessToken.split('.')).toHaveLength(3);
+    expect(res.body.refreshToken).toEqual(expect.any(String));
+    // Rotated — the new refresh token is not the one we sent.
+    expect(res.body.refreshToken).not.toBe(refreshToken);
+    expect(res.body.user).toMatchObject({ username: 'admin' });
+  });
+
+  it('rotates: the new token works and the old one is revoked', async () => {
+    const oldToken = await loginRefreshToken();
+    const rotated = await request(app).post('/api/auth/refresh').send({ refreshToken: oldToken });
+    const newToken = rotated.body.refreshToken as string;
+
+    // New token works (assert before touching the old one — reuse of the
+    // old token triggers family revocation under reuse detection).
+    const useNew = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: newToken });
+    expect(useNew.status).toBe(200);
+
+    // Old token is revoked.
+    const reuseOld = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: oldToken });
+    expect(reuseOld.status).toBe(401);
+  });
+
+  it('reuse detection: replaying a revoked token revokes the whole family', async () => {
+    const r1 = await loginRefreshToken();
+    const rotated = await request(app).post('/api/auth/refresh').send({ refreshToken: r1 });
+    const r2 = rotated.body.refreshToken as string;
+
+    // r1 is already revoked (rotated away). Replaying it is the reuse
+    // signal — a thief or the victim racing a thief.
+    const replay = await request(app).post('/api/auth/refresh').send({ refreshToken: r1 });
+    expect(replay.status).toBe(401);
+
+    // The whole family is now dead: r2, valid a moment ago, is revoked too.
+    const useR2 = await request(app).post('/api/auth/refresh').send({ refreshToken: r2 });
+    expect(useR2.status).toBe(401);
+  });
+
+  it('returns 401 for an unknown refresh token', async () => {
+    const res = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: 'not-a-real-token' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 when refreshToken is missing', async () => {
+    const res = await request(app).post('/api/auth/refresh').send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 401 for an expired refresh token', async () => {
+    const refreshToken = await loginRefreshToken();
+    // Expire the row directly — avoids coupling the test to the hash scheme.
+    await getDb().refreshToken.updateMany({
+      where: { revokedAt: null },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const res = await request(app).post('/api/auth/refresh').send({ refreshToken });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /api/auth/logout', () => {
+  async function loginRefreshToken(): Promise<string> {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'admin', password: 'admin123' });
+    return res.body.refreshToken as string;
+  }
+
+  it('revokes the refresh token so it can no longer refresh', async () => {
+    const refreshToken = await loginRefreshToken();
+
+    const out = await request(app).post('/api/auth/logout').send({ refreshToken });
+    expect(out.status).toBe(200);
+
+    const refresh = await request(app).post('/api/auth/refresh').send({ refreshToken });
+    expect(refresh.status).toBe(401);
+  });
+
+  it('is idempotent — logging out an unknown token still returns 200', async () => {
+    const out = await request(app)
+      .post('/api/auth/logout')
+      .send({ refreshToken: 'never-existed' });
+    expect(out.status).toBe(200);
+  });
+
+  it('returns 400 when refreshToken is missing', async () => {
+    const out = await request(app).post('/api/auth/logout').send({});
+    expect(out.status).toBe(400);
   });
 });
 

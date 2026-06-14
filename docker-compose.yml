@@ -36,7 +36,7 @@ services:
       # Fail loud if missing — no placeholder default. Copy .env.example
       # to .env and set a real value before booting.
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required — copy .env.example to .env and set a real value}
-      - JWT_EXPIRES_IN=2h
+      - JWT_EXPIRES_IN=15m
       - CORS_ORIGIN=http://localhost:8080
       - DATABASE_URL=postgresql://nimbus:${POSTGRES_PASSWORD}@postgres:5432/nimbus
     ports:

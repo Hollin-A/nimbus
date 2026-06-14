@@ -9,7 +9,8 @@ import { passwordResetTokensRepo } from './password-reset-tokens.repo';
 import { refreshTokensRepo } from './refresh-tokens.repo';
 
 export interface AuthResult {
-  token: string;
+  accessToken: string;
+  refreshToken: string;
   user: PublicUser;
 }
 
@@ -41,11 +42,27 @@ export async function registerUser(
 }
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-// Reset tokens are high-entropy random values, so a fast sha256 is enough
-// to store them safely (unlike low-entropy passwords, which need bcrypt).
-function hashResetToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
+// Reset and refresh tokens are high-entropy random values, so a fast
+// sha256 is enough to store them safely (unlike low-entropy passwords,
+// which need bcrypt). Only the hash is ever persisted.
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+// Issues an opaque refresh token for a user, persists only its hash with
+// a 30-day expiry, and returns the raw token for the client. The refresh
+// token is database-backed (not a JWT) precisely so it can be revoked —
+// on logout, rotation, or reuse detection.
+async function issueRefreshToken(userId: string): Promise<string> {
+  const token = randomBytes(32).toString('base64url');
+  await refreshTokensRepo.create({
+    tokenHash: sha256(token),
+    userId,
+    expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+  });
+  return token;
 }
 
 export interface PasswordResetIssued {
@@ -72,7 +89,7 @@ export async function requestPasswordReset(
   const token = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
   await passwordResetTokensRepo.create({
-    tokenHash: hashResetToken(token),
+    tokenHash: sha256(token),
     userId: user.id,
     expiresAt,
   });
@@ -87,7 +104,7 @@ export async function confirmPasswordReset(
   token: string,
   newPassword: string,
 ): Promise<boolean> {
-  const row = await passwordResetTokensRepo.findByTokenHash(hashResetToken(token));
+  const row = await passwordResetTokensRepo.findByTokenHash(sha256(token));
   if (!row || row.usedAt || row.expiresAt.getTime() < Date.now()) return false;
 
   await usersRepo.updatePassword(row.userId, await bcrypt.hash(newPassword, BCRYPT_COST));
@@ -112,12 +129,56 @@ export async function authenticate(
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return null;
   return {
-    token: signToken(user),
+    accessToken: signAccessToken(user),
+    refreshToken: await issueRefreshToken(user.id),
     user: toPublicUser(user),
   };
 }
 
-function signToken(user: User): string {
+// Exchanges a refresh token for a fresh access + refresh pair, rotating
+// the refresh token (the presented one is revoked, a new one issued).
+// Returns null — a 401 at the route — if the token is unknown, revoked,
+// expired, or its user is gone. Rotation means a stolen refresh token is
+// usable at most once before it's revoked; reuse detection (commit 3)
+// builds on the revoked branch.
+export async function refreshSession(rawToken: string): Promise<AuthResult | null> {
+  const row = await refreshTokensRepo.findByTokenHash(sha256(rawToken));
+  if (!row) return null;
+
+  // Reuse detection: a token that's already revoked is being replayed.
+  // Rotation revokes a token the moment it's used, so a revoked token in
+  // hand means either a thief replaying a stolen token or the victim
+  // racing the thief — either way the chain is compromised. Revoke the
+  // user's entire token family so both parties must re-authenticate.
+  if (row.revokedAt) {
+    await refreshTokensRepo.revokeAllForUser(row.userId);
+    return null;
+  }
+  if (row.expiresAt.getTime() < Date.now()) return null;
+
+  const user = await usersRepo.findById(row.userId);
+  if (!user) return null;
+
+  await refreshTokensRepo.revoke(row.id);
+  return {
+    accessToken: signAccessToken(user),
+    refreshToken: await issueRefreshToken(user.id),
+    user: toPublicUser(user),
+  };
+}
+
+// Revokes the presented refresh token. Idempotent — an unknown or
+// already-revoked token is a no-op, so logout always "succeeds" from the
+// client's side. No access token required: it may well be expired, and
+// the refresh token is the credential being torn down.
+export async function logout(rawToken: string): Promise<void> {
+  const row = await refreshTokensRepo.findByTokenHash(sha256(rawToken));
+  if (row && !row.revokedAt) {
+    await refreshTokensRepo.revoke(row.id);
+  }
+}
+
+function signAccessToken(user: User): string {
   const claims: AuthClaims = { sub: user.id, username: user.username };
   const options: SignOptions = {
     expiresIn: config.jwtExpiresIn as SignOptions['expiresIn'],
