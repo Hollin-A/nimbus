@@ -40,23 +40,25 @@ describe('MobileTabBar', () => {
     ).toBeInTheDocument();
   });
 
-  it('marks Home as active on /', () => {
+  it('marks Home as active on / via aria-current', () => {
     renderAt('/');
-    expect(screen.getByRole('link', { name: /home/i })).toHaveClass(
-      'text-brand',
+    expect(screen.getByRole('link', { name: /home/i })).toHaveAttribute(
+      'aria-current',
+      'page',
     );
-    expect(screen.getByRole('link', { name: /broadcast/i })).not.toHaveClass(
-      'text-brand',
-    );
+    expect(
+      screen.getByRole('link', { name: /broadcast/i }),
+    ).not.toHaveAttribute('aria-current');
   });
 
-  it('marks Broadcast as active on /broadcast', () => {
+  it('marks Broadcast as active on /broadcast via aria-current', () => {
     renderAt('/broadcast');
-    expect(screen.getByRole('link', { name: /broadcast/i })).toHaveClass(
-      'text-brand',
+    expect(screen.getByRole('link', { name: /broadcast/i })).toHaveAttribute(
+      'aria-current',
+      'page',
     );
-    expect(screen.getByRole('link', { name: /home/i })).not.toHaveClass(
-      'text-brand',
+    expect(screen.getByRole('link', { name: /home/i })).not.toHaveAttribute(
+      'aria-current',
     );
   });
 

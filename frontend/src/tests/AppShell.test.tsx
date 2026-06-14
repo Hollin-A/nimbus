@@ -44,4 +44,13 @@ describe('AppShell nav role gating', () => {
     expect(screen.getByRole('link', { name: /nimbus home/i })).toBeInTheDocument();
     expect(screen.queryAllByRole('link', { name: /broadcast/i })).toHaveLength(0);
   });
+
+  it('labels the desktop nav for landmark parity with the mobile tab bar', () => {
+    renderShell();
+    // Both the desktop header nav and the mobile tab bar are named landmarks,
+    // so screen-reader landmark enumeration isn't left with an unnamed <nav>.
+    expect(
+      screen.getAllByRole('navigation', { name: 'Primary' }),
+    ).toHaveLength(2);
+  });
 });
