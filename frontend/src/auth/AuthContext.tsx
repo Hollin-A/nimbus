@@ -89,6 +89,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Keep tabs consistent via the `storage` event (which fires in *other*
+  // tabs when localStorage changes). Two cases, both keyed off the access
+  // token:
+  //   • removed (null) — another tab logged out; drop our session too. That
+  //     tab already revoked the refresh token server-side, so we skip the
+  //     redundant API call and just clear locally.
+  //   • replaced — another tab rotated the pair on a transparent refresh.
+  //     Adopt it so our next refresh doesn't reuse a now-revoked token and
+  //     trip reuse-detection, which would log every tab out. We only sync an
+  //     existing session; a fresh login elsewhere is intentionally ignored.
+  useEffect(() => {
+    function onStorage(event: StorageEvent): void {
+      if (event.key !== ACCESS_TOKEN_KEY) return;
+      if (event.newValue === null) {
+        clearSession();
+      } else if (refreshTokenRef.current) {
+        refreshTokenRef.current = localStorage.getItem(REFRESH_TOKEN_KEY);
+        setToken(event.newValue);
+      }
+    }
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   async function login(username: string, password: string): Promise<void> {
     const result = await apiLogin(username, password);
     persistTokens(result.accessToken, result.refreshToken);
