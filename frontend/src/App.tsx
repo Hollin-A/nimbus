@@ -14,28 +14,31 @@ import { LiveMessagesProvider } from './socket/LiveMessagesProvider';
 export default function App() {
   return (
     <AuthProvider>
-      <LiveMessagesProvider>
-        <BrowserRouter>
-          <OfflineNotice />
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/reset" element={<PasswordResetRequestPage />} />
-            <Route path="/reset/confirm" element={<PasswordResetConfirmPage />} />
-            <Route
-              element={
-                <ProtectedRoute>
+      <BrowserRouter>
+        <OfflineNotice />
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/reset" element={<PasswordResetRequestPage />} />
+          <Route path="/reset/confirm" element={<PasswordResetConfirmPage />} />
+          {/* The live-message socket only exists for authed routes, so the
+              provider lives inside ProtectedRoute rather than wrapping the
+              whole router. */}
+          <Route
+            element={
+              <ProtectedRoute>
+                <LiveMessagesProvider>
                   <AppShell />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/" element={<HomePage />} />
-              <Route path="/broadcast" element={<BroadcastPage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </LiveMessagesProvider>
+                </LiveMessagesProvider>
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/" element={<HomePage />} />
+            <Route path="/broadcast" element={<BroadcastPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
     </AuthProvider>
   );
 }
