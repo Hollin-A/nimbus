@@ -155,16 +155,8 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 // Auth
 // ---------------------------------------------------------------------------
 
-export interface LoginResponse {
-  token: string;
-  user: PublicUser;
-}
-
-export function login(
-  username: string,
-  password: string,
-): Promise<LoginResponse> {
-  return request<LoginResponse>('/api/auth/login', {
+export function login(username: string, password: string): Promise<AuthTokens> {
+  return request<AuthTokens>('/api/auth/login', {
     method: 'POST',
     body: { username, password },
   });

@@ -7,7 +7,7 @@ import Wordmark from '../components/Wordmark';
 import PasswordInput from '../components/PasswordInput';
 
 export default function LoginPage() {
-  const { status, login } = useAuth();
+  const { status, sessionExpired, login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +70,14 @@ export default function LoginPage() {
 
           {/* Form */}
           <div className="w-full max-w-md md:justify-self-end">
+            {sessionExpired && (
+              <div
+                role="status"
+                className="mb-4 rounded-input bg-severity-info-bg p-3 text-severity-info-text text-sm"
+              >
+                Your session expired. Please sign in again.
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-5" noValidate>
               <div>
                 <label
