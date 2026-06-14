@@ -118,4 +118,24 @@ describe('BroadcastPage submit robustness', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/sending broadcasts too quickly/i);
   });
+
+  it('aborts the in-flight request when the page unmounts', async () => {
+    let captured: { signal?: AbortSignal } | undefined;
+    mockPushMessage.mockImplementation(
+      (_body: unknown, _token: string, options?: { signal?: AbortSignal }) => {
+        captured = options;
+        return new Promise<void>(() => {}); // never resolves — stays in flight
+      },
+    );
+    const user = userEvent.setup();
+    const { unmount } = renderBroadcast();
+    await fillBroadcast(user);
+
+    await user.click(screen.getByRole('button', { name: /send broadcast/i }));
+    expect(captured?.signal).toBeInstanceOf(AbortSignal);
+    expect(captured?.signal?.aborted).toBe(false);
+
+    unmount();
+    expect(captured?.signal?.aborted).toBe(true);
+  });
 });
