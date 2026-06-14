@@ -1,7 +1,27 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MobileTabBar from '../components/MobileTabBar';
+
+// Broadcasting is admin-only, so the tab is role-gated. Default the mock
+// to an admin (the tab shows); the role test flips it to a viewer.
+const { mockRole } = vi.hoisted(() => ({
+  mockRole: { current: 'admin' as 'admin' | 'user' },
+}));
+vi.mock('../auth/useAuth', () => ({
+  useAuth: () => ({
+    user: { id: '1', username: 'u', displayName: 'U', role: mockRole.current },
+    token: 't',
+    status: 'authed' as const,
+    sessionExpired: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
+beforeEach(() => {
+  mockRole.current = 'admin';
+});
 
 function renderAt(initialPath: string) {
   return render(
@@ -45,5 +65,13 @@ describe('MobileTabBar', () => {
     expect(
       screen.getByRole('navigation', { name: /primary/i }),
     ).toBeInTheDocument();
+  });
+
+  it('hides the entire tab bar for a non-admin (Broadcast is the only gated tab; Home alone needs no bar)', () => {
+    mockRole.current = 'user';
+    renderAt('/');
+    expect(screen.queryByRole('navigation', { name: /primary/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /broadcast/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /home/i })).not.toBeInTheDocument();
   });
 });
