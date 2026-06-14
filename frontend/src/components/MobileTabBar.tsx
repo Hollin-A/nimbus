@@ -1,11 +1,6 @@
-import { Home, Megaphone } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
-
-const TABS = [
-  { to: '/', label: 'Home', icon: Home, end: true },
-  { to: '/broadcast', label: 'Broadcast', icon: Megaphone, end: false },
-] as const;
+import { PRIMARY_ROUTES } from '../lib/primaryRoutes';
 
 /**
  * Bottom tab bar shown only on mobile. The PWA installs to the home screen
@@ -28,7 +23,7 @@ export default function MobileTabBar() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <ul className="grid grid-cols-2">
-        {TABS.map(({ to, label, icon: Icon, end }) => (
+        {PRIMARY_ROUTES.map(({ to, label, icon: Icon, end }) => (
           <li key={to}>
             <NavLink
               to={to}

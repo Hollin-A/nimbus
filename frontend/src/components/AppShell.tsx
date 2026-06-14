@@ -1,22 +1,18 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import { PRIMARY_ROUTES } from '../lib/primaryRoutes';
 import { useConnectionStatus } from '../socket/useLiveMessages';
 import ConnectionStatus from './ConnectionStatus';
 import InstallPrompt from './InstallPrompt';
 import MobileTabBar from './MobileTabBar';
 import Wordmark from './Wordmark';
 
-const NAV_LINKS = [
-  { to: '/', label: 'Home', end: true, adminOnly: false },
-  { to: '/broadcast', label: 'Broadcast', end: false, adminOnly: true },
-] as const;
-
 export default function AppShell() {
   const { user, logout } = useAuth();
   const connectionStatus = useConnectionStatus();
 
   // Broadcasting is admin-only — drop the link for everyone else.
-  const navLinks = NAV_LINKS.filter(
+  const navLinks = PRIMARY_ROUTES.filter(
     (link) => !link.adminOnly || user?.role === 'admin',
   );
 
