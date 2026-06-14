@@ -51,6 +51,7 @@ export default function InstallPrompt() {
     <button
       type="button"
       onClick={handleClick}
+      aria-label="Install Nimbus as an app"
       className="hidden md:inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand hover:bg-brand-soft/70 transition-colors"
     >
       <Download className="h-3 w-3" aria-hidden />
