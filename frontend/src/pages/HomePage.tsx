@@ -33,17 +33,19 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!selectedCity || !token) return;
-    let cancelled = false;
+    // Abort the previous city's fetch when this effect re-runs (city change)
+    // or unmounts, so rapid switching doesn't pile up concurrent requests.
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
     setWeather(null);
-    getWeather(selectedCity, token)
+    getWeather(selectedCity, token, { signal: controller.signal })
       .then(({ weather }) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setWeather(weather);
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setError(
           err instanceof ApiError
             ? 'Could not load the weather for that city.'
@@ -51,11 +53,9 @@ export default function HomePage() {
         );
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [selectedCity, token, refetchKey]);
 
   function handleSelectCity(city: City) {
