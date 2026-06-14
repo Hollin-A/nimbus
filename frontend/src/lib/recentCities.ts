@@ -1,15 +1,18 @@
 import type { City } from '../types';
 
-const STORAGE_KEY = 'nimbus.recentCities';
+// Two independent lists share this logic, each under its own key: the cities
+// a user has viewed (home page) and the cities an admin has broadcast to.
+export const VIEWED_CITIES_KEY = 'nimbus.recentCities';
+export const BROADCAST_TARGETS_KEY = 'nimbus.broadcast-targets';
 const MAX_RECENT = 5;
 
 function sameCity(a: City, b: City): boolean {
   return a.latitude === b.latitude && a.longitude === b.longitude;
 }
 
-export function loadRecent(): City[] {
+export function loadRecent(key: string = VIEWED_CITIES_KEY): City[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -28,11 +31,15 @@ export function loadRecent(): City[] {
   }
 }
 
-export function saveRecent(city: City, current: City[]): City[] {
+export function saveRecent(
+  city: City,
+  current: City[],
+  key: string = VIEWED_CITIES_KEY,
+): City[] {
   const deduped = current.filter((c) => !sameCity(c, city));
   const next = [city, ...deduped].slice(0, MAX_RECENT);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(key, JSON.stringify(next));
   } catch {
     // Ignore quota / disabled-storage errors — the list is convenience, not state of record.
   }

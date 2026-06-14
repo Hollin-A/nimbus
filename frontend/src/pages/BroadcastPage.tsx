@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, type FormEvent } from 'react';
+import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { ApiError, pushMessage } from '../api/client';
@@ -6,6 +6,11 @@ import { useAuth } from '../auth/useAuth';
 import CitySearch from '../components/CitySearch';
 import SeveritySelect from '../components/SeveritySelect';
 import { useOnline } from '../lib/useOnline';
+import {
+  BROADCAST_TARGETS_KEY,
+  loadRecent,
+  saveRecent,
+} from '../lib/recentCities';
 import type { City, Severity } from '../types';
 
 const MAX_MESSAGE_LENGTH = 280;
@@ -92,6 +97,11 @@ export default function BroadcastPage() {
   const online = useOnline();
   const [state, dispatch] = useReducer(reducer, initialState);
   const { city: targetCity, message, severity, submit } = state;
+  // Cities this admin has broadcast to, for quick re-targeting. Kept under
+  // its own key so it never mixes with the home page's viewed-cities list.
+  const [recentTargets, setRecentTargets] = useState<City[]>(() =>
+    loadRecent(BROADCAST_TARGETS_KEY),
+  );
 
   const submitting = submit.status === 'submitting';
   const error = submit.status === 'error' ? submit.message : null;
@@ -156,6 +166,10 @@ export default function BroadcastPage() {
         type: 'submitSuccess',
         confirmation: `Broadcast sent to ${where}.`,
       });
+      // Remember where we just broadcast so it's one click away next time.
+      setRecentTargets((prev) =>
+        saveRecent(targetCity, prev, BROADCAST_TARGETS_KEY),
+      );
     } catch (err) {
       // Cancelled by an unmount — the component may be gone; don't touch state.
       if (controller.signal.aborted) return;
@@ -216,7 +230,7 @@ export default function BroadcastPage() {
                 </div>
               ) : (
                 <CitySearch
-                  recentCities={[]}
+                  recentCities={recentTargets}
                   onSelect={(city) => dispatch({ type: 'setCity', city })}
                 />
               )}
