@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
 import { ApiError, register as apiRegister } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import Wordmark from '../components/Wordmark';
 import PasswordInput from '../components/PasswordInput';
+import StatusBanner from '../components/StatusBanner';
 
 const MIN_PASSWORD = 8;
 
@@ -122,15 +122,7 @@ export default function RegisterPage() {
                 <p className="mt-1 text-xs text-muted">At least 8 characters.</p>
               </div>
 
-              {error && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-input bg-severity-alert-bg p-3 text-severity-alert-text text-sm"
-                >
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
+              {error && <StatusBanner kind="error" message={error} />}
 
               <button
                 type="submit"
