@@ -3,6 +3,7 @@ import { render, screen, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import BroadcastPage from '../pages/BroadcastPage';
+import { ApiError } from '../api/client';
 
 // Broadcasting is admin-only: a non-admin who navigates to /broadcast is
 // redirected home (the server's requireRole is the real boundary; this is
@@ -102,5 +103,19 @@ describe('BroadcastPage submit robustness', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Message')).not.toBeDisabled(),
     );
+  });
+
+  it('shows a friendly rate-limit message on a 429', async () => {
+    mockPushMessage.mockImplementation(() =>
+      Promise.reject(new ApiError('Too many requests', 429)),
+    );
+    const user = userEvent.setup();
+    renderBroadcast();
+    await fillBroadcast(user);
+
+    await user.click(screen.getByRole('button', { name: /send broadcast/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/sending broadcasts too quickly/i);
   });
 });
