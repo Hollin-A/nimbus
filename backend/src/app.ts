@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
+import { ZodError } from 'zod';
 import { config } from './config';
 import { logger } from './logger';
 import { requestContext } from './middleware/request-context';
@@ -20,6 +21,17 @@ import messagesRouter from './messages/messages.routes';
 // carry a status (e.g. malformed JSON from express.json → 400) are echoed with
 // that status; everything else is a 500.
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+  // Validation failures forwarded by the validate* middleware: a 400 with
+  // per-field detail, the shape the client's ApiError already understands.
+  if (err instanceof ZodError) {
+    if (res.headersSent) return;
+    res.status(400).json({
+      error: 'Invalid request',
+      details: err.flatten().fieldErrors,
+    });
+    return;
+  }
+
   const status =
     typeof (err as { status?: number }).status === 'number'
       ? (err as { status: number }).status
