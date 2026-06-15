@@ -1,4 +1,4 @@
-# ADR 0010 — Headless UI for the CitySearch combobox
+# ADR 0009 — Headless UI for the CitySearch combobox
 
 **Status:** accepted
 
