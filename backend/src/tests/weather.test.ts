@@ -3,12 +3,15 @@ import {
   it,
   expect,
   beforeAll,
+  afterAll,
   beforeEach,
   afterEach,
   vi,
 } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app';
+import { seed } from '../seed';
+import { truncateAll, disconnectDb } from './helpers/db';
 import {
   clearCache,
   describeWeatherCode,
@@ -92,11 +95,17 @@ function mockUpstreamJson(status: number, body: unknown) {
 }
 
 beforeAll(async () => {
+  // The admin account lives in Postgres now — seed a clean test DB,
+  // then log in. (The fetch mock below is set in beforeEach, so seed's
+  // DB calls, which use the pg driver not fetch, run unmocked here.)
+  await truncateAll();
+  await seed();
   const login = await request(app)
     .post('/api/auth/login')
-    .send({ username: 'demo', password: 'demo123' });
-  token = login.body.token;
+    .send({ username: 'admin', password: 'admin123' });
+  token = login.body.accessToken;
 });
+afterAll(disconnectDb);
 
 beforeEach(() => {
   fetchMock = vi.fn();

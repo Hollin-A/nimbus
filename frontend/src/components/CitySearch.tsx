@@ -1,44 +1,42 @@
-import { useEffect, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  Combobox,
+  ComboboxButton,
+  ComboboxInput,
+  ComboboxOption,
+  ComboboxOptions,
+} from '@headlessui/react';
+import { ChevronDown, Search, X } from 'lucide-react';
 import type { City } from '../types';
 import { searchCities, ApiError } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 
 interface CitySearchProps {
+  value: City | null;
+  onChange: (city: City | null) => void;
   recentCities: City[];
-  onSelect: (city: City) => void;
+}
+
+// Cities are identified by coordinates; match on those so the selected option
+// is recognised regardless of which object reference it came from.
+function sameCity(a: City | null, b: City | null): boolean {
+  return a?.latitude === b?.latitude && a?.longitude === b?.longitude;
 }
 
 export default function CitySearch({
+  value,
+  onChange,
   recentCities,
-  onSelect,
 }: CitySearchProps) {
   const { token } = useAuth();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<City[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Close the dropdown when clicking outside.
-  useEffect(() => {
-    function handleClick(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
-  // Debounced search. Each new keystroke aborts the previous in-flight
-  // fetch — otherwise rapid typing piled up concurrent requests and
-  // Open-Meteo's CDN blocked them (every search shares the same Render
-  // outbound IP).
+  // Debounced search. Each keystroke aborts the previous in-flight fetch —
+  // otherwise rapid typing piles up concurrent requests against the shared
+  // Render outbound IP, which Open-Meteo's CDN blocks.
   useEffect(() => {
     const q = query.trim();
     if (!token || q.length < 2) {
@@ -59,9 +57,8 @@ export default function CitySearch({
         if (cancelled) return;
         setResults(cities);
       } catch (err) {
-        // Caller-cancellation: our own cleanup fired before this resolved.
-        // Bail silently — UI shouldn't flash an error for a request we
-        // intentionally cancelled.
+        // Caller-cancellation: our cleanup fired before this resolved. Bail
+        // silently — no error flash for a request we intentionally cancelled.
         if (err instanceof DOMException && err.name === 'AbortError') return;
         if (cancelled) return;
         setError(
@@ -81,36 +78,49 @@ export default function CitySearch({
     };
   }, [query, token]);
 
-  function pickCity(city: City) {
-    onSelect(city);
+  function handleSelect(city: City | null) {
+    onChange(city);
     setQuery('');
-    setResults([]);
-    setOpen(false);
   }
 
-  const showDropdown = open && query.trim().length >= 2;
+  const q = query.trim();
+  const showNoMatches =
+    !loading && !error && q.length >= 2 && results.length === 0;
 
   return (
-    <div ref={containerRef} className="space-y-4">
-      <div className="relative">
-        <Search
-          className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted pointer-events-none"
-          aria-hidden="true"
-        />
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          placeholder="Search for a city…"
-          aria-label="Search for a city"
-          className="w-full rounded-full border border-border bg-white pl-11 pr-4 py-3 text-base md:text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
-        />
-        {showDropdown && (
-          <div className="absolute z-10 mt-2 w-full rounded-card border border-border bg-white shadow-elevated overflow-hidden">
+    <div className="space-y-4">
+      <Combobox value={value} onChange={handleSelect} by={sameCity}>
+        <div className="relative">
+          <Search
+            className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted pointer-events-none"
+            aria-hidden="true"
+          />
+          <ComboboxInput
+            aria-label="Search for a city"
+            displayValue={(city: City | null) => city?.name ?? ''}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search for a city…"
+            className="w-full rounded-full border border-border bg-white pl-11 pr-10 py-3 text-base md:text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+          />
+          {value ? (
+            <button
+              type="button"
+              onClick={() => handleSelect(null)}
+              aria-label="Clear selected city"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : (
+            <ComboboxButton
+              aria-label="Show city suggestions"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink transition-colors"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </ComboboxButton>
+          )}
+
+          <ComboboxOptions className="absolute z-10 mt-2 w-full rounded-card border border-border bg-white shadow-elevated overflow-hidden empty:invisible">
             {loading && (
               <div className="px-4 py-3 text-sm text-muted">Searching…</div>
             )}
@@ -119,29 +129,28 @@ export default function CitySearch({
                 {error}
               </div>
             )}
-            {!loading && !error && results.length === 0 && (
+            {showNoMatches && (
               <div className="px-4 py-3 text-sm text-muted">
-                No matches for "{query.trim()}".
+                No matches for "{q}".
               </div>
             )}
             {!loading &&
               !error &&
               results.map((city, index) => (
-                <button
+                <ComboboxOption
                   key={`${city.name}-${city.latitude}-${city.longitude}-${index}`}
-                  type="button"
-                  onClick={() => pickCity(city)}
-                  className="block w-full text-left px-4 py-3 text-sm hover:bg-lavender transition-colors"
+                  value={city}
+                  className="block w-full text-left px-4 py-3 text-sm cursor-pointer data-[focus]:bg-lavender"
                 >
                   <span className="font-semibold text-ink">{city.name}</span>
                   {city.country && (
                     <span className="ml-2 text-muted">{city.country}</span>
                   )}
-                </button>
+                </ComboboxOption>
               ))}
-          </div>
-        )}
-      </div>
+          </ComboboxOptions>
+        </div>
+      </Combobox>
 
       {recentCities.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
@@ -152,7 +161,7 @@ export default function CitySearch({
             <button
               key={`recent-${city.latitude}-${city.longitude}-${index}`}
               type="button"
-              onClick={() => onSelect(city)}
+              onClick={() => onChange(city)}
               className="rounded-full bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-soft/70 transition-colors"
             >
               {city.name}

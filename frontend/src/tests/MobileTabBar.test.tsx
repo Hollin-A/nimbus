@@ -1,7 +1,27 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MobileTabBar from '../components/MobileTabBar';
+
+// Broadcasting is admin-only, so the tab is role-gated. Default the mock
+// to an admin (the tab shows); the role test flips it to a viewer.
+const { mockRole } = vi.hoisted(() => ({
+  mockRole: { current: 'admin' as 'admin' | 'user' },
+}));
+vi.mock('../auth/useAuth', () => ({
+  useAuth: () => ({
+    user: { id: '1', username: 'u', displayName: 'U', role: mockRole.current },
+    token: 't',
+    status: 'authed' as const,
+    sessionExpired: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
+beforeEach(() => {
+  mockRole.current = 'admin';
+});
 
 function renderAt(initialPath: string) {
   return render(
@@ -20,23 +40,25 @@ describe('MobileTabBar', () => {
     ).toBeInTheDocument();
   });
 
-  it('marks Home as active on /', () => {
+  it('marks Home as active on / via aria-current', () => {
     renderAt('/');
-    expect(screen.getByRole('link', { name: /home/i })).toHaveClass(
-      'text-brand',
+    expect(screen.getByRole('link', { name: /home/i })).toHaveAttribute(
+      'aria-current',
+      'page',
     );
-    expect(screen.getByRole('link', { name: /broadcast/i })).not.toHaveClass(
-      'text-brand',
-    );
+    expect(
+      screen.getByRole('link', { name: /broadcast/i }),
+    ).not.toHaveAttribute('aria-current');
   });
 
-  it('marks Broadcast as active on /broadcast', () => {
+  it('marks Broadcast as active on /broadcast via aria-current', () => {
     renderAt('/broadcast');
-    expect(screen.getByRole('link', { name: /broadcast/i })).toHaveClass(
-      'text-brand',
+    expect(screen.getByRole('link', { name: /broadcast/i })).toHaveAttribute(
+      'aria-current',
+      'page',
     );
-    expect(screen.getByRole('link', { name: /home/i })).not.toHaveClass(
-      'text-brand',
+    expect(screen.getByRole('link', { name: /home/i })).not.toHaveAttribute(
+      'aria-current',
     );
   });
 
@@ -45,5 +67,13 @@ describe('MobileTabBar', () => {
     expect(
       screen.getByRole('navigation', { name: /primary/i }),
     ).toBeInTheDocument();
+  });
+
+  it('hides the entire tab bar for a non-admin (Broadcast is the only gated tab; Home alone needs no bar)', () => {
+    mockRole.current = 'user';
+    renderAt('/');
+    expect(screen.queryByRole('navigation', { name: /primary/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /broadcast/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /home/i })).not.toBeInTheDocument();
   });
 });

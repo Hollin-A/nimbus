@@ -1,9 +1,12 @@
 export type Severity = 'info' | 'warning' | 'alert';
 
+export type UserRole = 'admin' | 'user';
+
 export interface PublicUser {
   id: string;
   username: string;
   displayName: string;
+  role: UserRole;
 }
 
 export interface LiveMessage {

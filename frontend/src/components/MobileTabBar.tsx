@@ -1,18 +1,21 @@
-import { Home, Megaphone } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-
-const TABS = [
-  { to: '/', label: 'Home', icon: Home, end: true },
-  { to: '/broadcast', label: 'Broadcast', icon: Megaphone, end: false },
-] as const;
+import { useAuth } from '../auth/useAuth';
+import { PRIMARY_ROUTES } from '../lib/primaryRoutes';
 
 /**
  * Bottom tab bar shown only on mobile. The PWA installs to the home screen
  * and runs in standalone mode — a bottom bar makes the experience read as a
  * real app rather than a responsive website. `env(safe-area-inset-bottom)`
  * keeps the bar above iOS's home-indicator gesture area.
+ *
+ * Broadcasting is admin-only, so for a non-admin the only destination is
+ * Home — and a one-tab bar is pointless. Hide the bar entirely; the page
+ * content is full-height on its own.
  */
 export default function MobileTabBar() {
+  const { user } = useAuth();
+  if (user?.role !== 'admin') return null;
+
   return (
     <nav
       aria-label="Primary"
@@ -20,13 +23,13 @@ export default function MobileTabBar() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <ul className="grid grid-cols-2">
-        {TABS.map(({ to, label, icon: Icon, end }) => (
+        {PRIMARY_ROUTES.map(({ to, label, icon: Icon, end }) => (
           <li key={to}>
             <NavLink
               to={to}
               end={end}
               className={({ isActive }) =>
-                `flex flex-col items-center justify-center gap-1 py-2.5 text-xs font-semibold transition-colors ${
+                `flex flex-col items-center justify-center gap-1 py-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40 ${
                   isActive ? 'text-brand' : 'text-muted hover:text-ink'
                 }`
               }

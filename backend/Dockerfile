@@ -9,7 +9,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY tsconfig.json tsconfig.build.json ./
+COPY prisma ./prisma
 COPY src ./src
+# `npm run build` runs `prisma generate` (needs the schema above) then tsc.
 RUN npm run build
 
 # ---- Runtime stage: prod deps only + compiled JS ----
@@ -21,7 +23,22 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
+# Carry the generated Prisma client (engine binary + client) from the build
+# stage — `npm ci` installs @prisma/client but doesn't run `prisma generate`.
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/dist ./dist
 
 EXPOSE 4000
+
+# Liveness probe — orchestrators (Docker, Compose, K8s, Render) gate readiness
+# on this instead of "process started". wget is provided by busybox in
+# node:alpine.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:4000/api/health || exit 1
+
+# Drop root before exec — node:alpine ships a `node` user but doesn't switch
+# to it by default. A code-execution vuln in the app shouldn't equal root in
+# the container.
+USER node
+
 CMD ["node", "dist/index.js"]

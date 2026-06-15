@@ -1,19 +1,20 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
+import { PRIMARY_ROUTES } from '../lib/primaryRoutes';
 import { useConnectionStatus } from '../socket/useLiveMessages';
 import ConnectionStatus from './ConnectionStatus';
 import InstallPrompt from './InstallPrompt';
 import MobileTabBar from './MobileTabBar';
 import Wordmark from './Wordmark';
 
-const NAV_LINKS = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/broadcast', label: 'Broadcast', end: false },
-] as const;
-
 export default function AppShell() {
   const { user, logout } = useAuth();
   const connectionStatus = useConnectionStatus();
+
+  // Broadcasting is admin-only — drop the link for everyone else.
+  const navLinks = PRIMARY_ROUTES.filter(
+    (link) => !link.adminOnly || user?.role === 'admin',
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-white text-ink">
@@ -22,8 +23,11 @@ export default function AppShell() {
           <Link to="/" aria-label="Nimbus home" className="-mx-2 px-2 py-1">
             <Wordmark />
           </Link>
-          <nav className="hidden md:flex items-center gap-6 text-sm">
-            {NAV_LINKS.map((link) => (
+          <nav
+            aria-label="Primary"
+            className="hidden md:flex items-center gap-6 text-sm"
+          >
+            {navLinks.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}

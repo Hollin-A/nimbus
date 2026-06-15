@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   backend:
@@ -13,6 +13,25 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # The suite hits a real Postgres after the Phase 2 cutover. The
+    # password here is throwaway — the service is reachable only from
+    # this job, so it's not a secret.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nimbus
+          POSTGRES_PASSWORD: nimbus
+          POSTGRES_DB: nimbus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nimbus -d nimbus"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://nimbus:nimbus@localhost:5432/nimbus
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,8 +40,12 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      # Generate the Prisma client before typecheck/test — those run
+      # before `npm run build`, which is where generate otherwise lives.
+      - run: npx prisma generate
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run dead-code
       - run: npm test
       - run: npm run build
 
@@ -42,5 +65,18 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run dead-code
       - run: npm test
       - run: npm run build
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    # Catches Dockerfile rot (a base-image bump dropping a package, a stale
+    # COPY target) at PR time. Build only — no registry push.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t nimbus-backend:ci ./backend
+      - name: Build frontend image
+        run: docker build -t nimbus-frontend:ci ./frontend

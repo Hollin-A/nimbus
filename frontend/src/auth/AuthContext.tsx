@@ -1,58 +1,165 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { PublicUser } from '../types';
-import { getMe, login as apiLogin } from '../api/client';
+import {
+  getMe,
+  login as apiLogin,
+  logout as apiLogout,
+  refreshTokens,
+  setRefreshHandler,
+} from '../api/client';
 import Splash from '../components/Splash';
 import { AuthContext, type AuthContextValue, type AuthStatus } from './context';
 
-const TOKEN_KEY = 'nimbus.token';
+const ACCESS_TOKEN_KEY = 'nimbus.token';
+const REFRESH_TOKEN_KEY = 'nimbus.refresh';
+
+// How often an authed tab pokes /me to keep the session honest.
+const ME_PING_INTERVAL_MS = 5 * 60 * 1000;
+// Cap how long the splash screen can block on a session restore.
+const REHYDRATE_TIMEOUT_MS = 10 * 1000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null); // access token
   const [status, setStatus] = useState<AuthStatus>('loading');
+  const [sessionExpired, setSessionExpired] = useState(false);
 
-  // Restore session on mount if a token is in localStorage.
-  useEffect(() => {
-    const saved = localStorage.getItem(TOKEN_KEY);
-    if (!saved) {
-      setStatus('anon');
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const { user } = await getMe(saved);
-        if (cancelled) return;
-        setUser(user);
-        setToken(saved);
-        setStatus('authed');
-      } catch {
-        if (cancelled) return;
-        localStorage.removeItem(TOKEN_KEY);
-        setStatus('anon');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // The refresh handler is registered once but must always read the
+  // *latest* refresh token, so it lives in a ref rather than the closure.
+  const refreshTokenRef = useRef<string | null>(null);
 
-  async function login(username: string, password: string): Promise<void> {
-    const result = await apiLogin(username, password);
-    localStorage.setItem(TOKEN_KEY, result.token);
-    setToken(result.token);
-    setUser(result.user);
-    setStatus('authed');
+  function persistTokens(accessToken: string, refreshToken: string): void {
+    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    refreshTokenRef.current = refreshToken;
+    setToken(accessToken);
   }
 
-  function logout(): void {
-    localStorage.removeItem(TOKEN_KEY);
+  function clearSession(): void {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    refreshTokenRef.current = null;
     setToken(null);
     setUser(null);
     setStatus('anon');
   }
 
-  const value: AuthContextValue = { user, token, status, login, logout };
+  // Register the transparent-refresh handler before anything makes an
+  // authenticated request (including the rehydrate below). The handler
+  // exchanges the stored refresh token for a fresh pair and returns the
+  // new access token; if that fails the session is dead — tear it down
+  // and flag it so the login screen can explain.
+  useEffect(() => {
+    setRefreshHandler(async () => {
+      const rt = refreshTokenRef.current;
+      if (!rt) throw new Error('no refresh token');
+      try {
+        const result = await refreshTokens(rt);
+        persistTokens(result.accessToken, result.refreshToken);
+        setUser(result.user);
+        return result.accessToken;
+      } catch (err) {
+        clearSession();
+        setSessionExpired(true);
+        throw err;
+      }
+    });
+    return () => setRefreshHandler(null);
+  }, []);
+
+  // Restore the session on mount. getMe goes through the client, so an
+  // expired-but-refreshable access token is recovered transparently.
+  useEffect(() => {
+    const savedAccess = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!savedAccess) {
+      setStatus('anon');
+      return;
+    }
+    refreshTokenRef.current = localStorage.getItem(REFRESH_TOKEN_KEY);
+    let cancelled = false;
+    // Don't let a hung backend strand the app on the splash screen: abort the
+    // restore after a bounded wait and fall back to anonymous.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REHYDRATE_TIMEOUT_MS);
+    (async () => {
+      try {
+        const { user } = await getMe(savedAccess, { signal: controller.signal });
+        if (cancelled) return;
+        setUser(user);
+        setToken(localStorage.getItem(ACCESS_TOKEN_KEY));
+        setStatus('authed');
+      } catch {
+        if (cancelled) return;
+        clearSession();
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, []);
+
+  // Keep tabs consistent via the `storage` event (which fires in *other*
+  // tabs when localStorage changes). Two cases, both keyed off the access
+  // token:
+  //   • removed (null) — another tab logged out; drop our session too. That
+  //     tab already revoked the refresh token server-side, so we skip the
+  //     redundant API call and just clear locally.
+  //   • replaced — another tab rotated the pair on a transparent refresh.
+  //     Adopt it so our next refresh doesn't reuse a now-revoked token and
+  //     trip reuse-detection, which would log every tab out. We only sync an
+  //     existing session; a fresh login elsewhere is intentionally ignored.
+  useEffect(() => {
+    function onStorage(event: StorageEvent): void {
+      if (event.key !== ACCESS_TOKEN_KEY) return;
+      if (event.newValue === null) {
+        clearSession();
+      } else if (refreshTokenRef.current) {
+        refreshTokenRef.current = localStorage.getItem(REFRESH_TOKEN_KEY);
+        setToken(event.newValue);
+      }
+    }
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  // While authed, poll /me on an interval. A refreshable-but-expired access
+  // token gets renewed (getMe goes through the client's 401→refresh path),
+  // and a session that has died server-side surfaces within one interval —
+  // the refresh handler tears it down — instead of waiting for the user's
+  // next action. Transient failures are swallowed; the handler owns teardown.
+  useEffect(() => {
+    if (status !== 'authed') return;
+    const id = setInterval(() => {
+      const access = localStorage.getItem(ACCESS_TOKEN_KEY);
+      if (!access) return;
+      void getMe(access)
+        .then(({ user }) => setUser(user))
+        .catch(() => {});
+    }, ME_PING_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [status]);
+
+  async function login(username: string, password: string): Promise<void> {
+    const result = await apiLogin(username, password);
+    persistTokens(result.accessToken, result.refreshToken);
+    setUser(result.user);
+    setStatus('authed');
+    setSessionExpired(false);
+  }
+
+  function logout(): void {
+    // Revoke server-side, but don't block the UI on it — log out locally
+    // regardless of whether the request lands.
+    const rt = refreshTokenRef.current;
+    if (rt) void apiLogout(rt).catch(() => {});
+    clearSession();
+  }
+
+  const value: AuthContextValue = { user, token, status, sessionExpired, login, logout };
 
   return (
     <AuthContext.Provider value={value}>

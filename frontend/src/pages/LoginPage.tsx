@@ -1,18 +1,24 @@
 import { useState, type FormEvent } from 'react';
-import { Link, Navigate } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import Wordmark from '../components/Wordmark';
+import PasswordInput from '../components/PasswordInput';
+import StatusBanner from '../components/StatusBanner';
 
 export default function LoginPage() {
-  const { status, login } = useAuth();
+  const { status, sessionExpired, login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (status === 'authed') return <Navigate to="/" replace />;
+  // Return the user to wherever ProtectedRoute bounced them from (it
+  // stashes the attempted location in state.from), falling back to home.
+  const location = useLocation();
+  const from =
+    (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/';
+  if (status === 'authed') return <Navigate to={from} replace />;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -69,6 +75,14 @@ export default function LoginPage() {
 
           {/* Form */}
           <div className="w-full max-w-md md:justify-self-end">
+            {sessionExpired && (
+              <div className="mb-4">
+                <StatusBanner
+                  kind="info"
+                  message="Your session expired. Please sign in again."
+                />
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-5" noValidate>
               <div>
                 <label
@@ -94,26 +108,24 @@ export default function LoginPage() {
                 >
                   Password
                 </label>
-                <input
+                <PasswordInput
                   id="password"
-                  type="password"
                   autoComplete="current-password"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 w-full rounded-input border border-border bg-white px-3 py-2.5 text-base md:text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  onChange={setPassword}
                 />
+                <div className="mt-1.5 text-right">
+                  <Link
+                    to="/reset"
+                    className="text-sm font-semibold text-brand hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
 
-              {error && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-input bg-severity-alert-bg p-3 text-severity-alert-text text-sm"
-                >
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
+              {error && <StatusBanner kind="error" message={error} />}
 
               <button
                 type="submit"
@@ -123,11 +135,32 @@ export default function LoginPage() {
                 {submitting ? 'Signing in…' : 'Sign in'}
               </button>
 
+              <div className="rounded-input border border-border bg-surface-2 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  Demo accounts
+                </p>
+                <p className="mt-1.5 text-sm text-body">
+                  <code className="text-ink font-mono">admin</code>{' '}
+                  <span className="text-border">/</span>{' '}
+                  <code className="text-ink font-mono">admin123</code>
+                  <span className="text-muted"> — full access</span>
+                </p>
+                <p className="mt-0.5 text-sm text-body">
+                  <code className="text-ink font-mono">viewer</code>{' '}
+                  <span className="text-border">/</span>{' '}
+                  <code className="text-ink font-mono">viewer123</code>
+                  <span className="text-muted"> — view only</span>
+                </p>
+              </div>
+
               <p className="text-sm text-muted text-center">
-                Try the demo:{' '}
-                <code className="text-ink font-mono">demo</code>{' '}
-                <span className="text-border">/</span>{' '}
-                <code className="text-ink font-mono">demo123</code>
+                Don’t have an account?{' '}
+                <Link
+                  to="/register"
+                  className="text-brand font-semibold hover:underline"
+                >
+                  Create one
+                </Link>
               </p>
             </form>
           </div>

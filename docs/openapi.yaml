@@ -1,12 +1,15 @@
 openapi: 3.0.3
 info:
   title: Nimbus API
-  version: 1.0.0
+  version: 2.0.0
   description: >
     REST API for Nimbus — live weather and city-scoped alerts.
 
-    All endpoints except `/api/health` and `/api/auth/login` require a Bearer
-    JWT obtained from `/api/auth/login`.
+    Auth uses short-lived JWT access tokens plus rotating, DB-backed refresh
+    tokens. The public endpoints are `/api/health` and the `/api/auth/*` flows
+    (register, login, refresh, logout, password reset); everything else needs a
+    Bearer access token. Broadcasting (`POST /api/messages`) additionally
+    requires the `admin` role.
 
     Real-time alert delivery is handled over Socket.IO, which OpenAPI does not
     model natively — see the "Socket.IO events" section at the end of this file.
@@ -53,22 +56,172 @@ paths:
               type: object
               required: [username, password]
               properties:
-                username: { type: string, example: demo }
-                password: { type: string, example: demo123 }
+                username: { type: string, example: admin }
+                password: { type: string, example: admin123 }
       responses:
         '200':
           description: Authenticated
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  token: { type: string, description: JWT, expires per JWT_EXPIRES_IN }
-                  user: { $ref: '#/components/schemas/PublicUser' }
+              schema: { $ref: '#/components/schemas/AuthTokens' }
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Create an account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, displayName]
+              properties:
+                username: { type: string, minLength: 3, maxLength: 30 }
+                password: { type: string, minLength: 8, maxLength: 72 }
+                displayName: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/PublicUser' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Username already taken
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate the refresh token for a fresh access + refresh pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: New token pair (the presented refresh token is now revoked)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke a refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: Revoked (idempotent — 200 even for an unknown token)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/auth/password-reset/request:
+    post:
+      tags: [Auth]
+      summary: Request a single-use password-reset token
+      description: >
+        With no mail service in the demo the token is returned in the response
+        (the UI surfaces it). This makes usernames enumerable via the 404 — an
+        accepted trade-off for a portfolio app with no private data.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username: { type: string }
+      responses:
+        '200':
+          description: Reset token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expiresAt: { type: string, format: date-time }
+                  note: { type: string }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: No account with that username
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/auth/password-reset/confirm:
+    post:
+      tags: [Auth]
+      summary: Set a new password with a reset token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, minLength: 8, maxLength: 72 }
+      responses:
+        '200':
+          description: Password updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+        '400':
+          description: Invalid request, or an invalid / expired reset token
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -160,10 +313,11 @@ paths:
   /api/messages:
     post:
       tags: [Messages]
-      summary: Broadcast an alert to a city
+      summary: Broadcast an alert to a city (admin only)
       description: >
         Stores the message and emits it over Socket.IO to everyone watching the
         target coordinates (`live-message` event in the matching city room).
+        Requires the `admin` role.
       requestBody:
         required: true
         content:
@@ -182,6 +336,11 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Authenticated but not an admin
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     get:
       tags: [Messages]
       summary: Per-city alert history (newest first, capped at 50)
@@ -247,8 +406,16 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        username: { type: string, example: demo }
-        displayName: { type: string, example: Demo User }
+        username: { type: string, example: admin }
+        displayName: { type: string, example: Admin }
+        role: { type: string, enum: [admin, user], example: admin }
+
+    AuthTokens:
+      type: object
+      properties:
+        accessToken: { type: string, description: 'JWT access token; expires per JWT_EXPIRES_IN (15m)' }
+        refreshToken: { type: string, description: Opaque refresh token; rotates on every refresh }
+        user: { $ref: '#/components/schemas/PublicUser' }
 
     City:
       type: object
@@ -263,7 +430,7 @@ components:
       properties:
         city: { type: string, example: Melbourne }
         country: { type: string, nullable: true, example: Australia }
-        temperature: { type: number, description: °C, rounded, example: 14 }
+        temperature: { type: number, description: '°C, rounded', example: 14 }
         apparentTemperature: { type: number, description: Feels-like °C, example: 14 }
         humidity: { type: number, description: '%', example: 85 }
         windSpeed: { type: number, description: km/h, example: 5 }
@@ -327,3 +494,8 @@ security:
 #   leave-city   client → server   (no payload)   Leaves the current room; optional ack.
 #   live-message server → client   LiveMessage    Emitted to a city room when POST /api/messages
 #                                                  targets those coordinates.
+#
+# Rooms are keyed by coordinates (`city:<lat>|<lon>`). A socket is in at most
+# one room — joining a new city leaves the previous one. Room membership is lost
+# on disconnect, so the client re-emits join-city on reconnect. The handshake
+# token is the short-lived access token (refresh, then reconnect, on expiry).

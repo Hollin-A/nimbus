@@ -5,7 +5,7 @@ const configSchema = z.object({
   PORT: z.coerce.number().int().min(0).max(65535).default(4000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   JWT_SECRET: z.string().min(1).default('dev-only-change-me'),
-  JWT_EXPIRES_IN: z.string().min(1).default('2h'),
+  JWT_EXPIRES_IN: z.string().min(1).default('15m'),
   CORS_ORIGIN: z.string().url().default('http://localhost:5173'),
 });
 
@@ -13,6 +13,10 @@ const parsed = configSchema.parse(process.env);
 
 if (parsed.NODE_ENV === 'production' && parsed.JWT_SECRET === 'dev-only-change-me') {
   throw new Error('JWT_SECRET must be set to a non-default value in production.');
+}
+
+if (parsed.NODE_ENV === 'production' && parsed.CORS_ORIGIN === 'http://localhost:5173') {
+  throw new Error('CORS_ORIGIN must be set to a non-default value in production.');
 }
 
 export const config = Object.freeze({

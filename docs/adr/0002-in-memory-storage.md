@@ -1,6 +1,6 @@
 # 0002 — In-memory storage
 
-**Status:** Accepted
+**Status:** Superseded by [ADR 0006](0006-postgres-prisma.md) — v2 moved persistence to PostgreSQL/Prisma.
 **Date:** 2026-05-25
 
 ## Context

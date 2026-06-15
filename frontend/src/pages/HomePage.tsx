@@ -4,18 +4,21 @@ import { useAuth } from '../auth/useAuth';
 import CitySearch from '../components/CitySearch';
 import MessageHistory from '../components/MessageHistory';
 import ToastHost from '../components/ToastHost';
+import StatusBanner from '../components/StatusBanner';
 import {
   WeatherCard,
   WeatherEmpty,
-  WeatherErrorCard,
   WeatherLoading,
+  WeatherOffline,
 } from '../components/WeatherCard';
 import { loadRecent, saveRecent } from '../lib/recentCities';
+import { useOnline } from '../lib/useOnline';
 import { useCityMessages } from '../socket/useLiveMessages';
 import type { City, Weather } from '../types';
 
 export default function HomePage() {
   const { token } = useAuth();
+  const online = useOnline();
   const [recent, setRecent] = useState<City[]>(() => loadRecent());
   const [selectedCity, setSelectedCity] = useState<City | null>(
     () => loadRecent()[0] ?? null,
@@ -27,23 +30,27 @@ export default function HomePage() {
 
   const {
     history: messages,
-    latest: liveMessage,
     historyError,
+    subscribe,
   } = useCityMessages(selectedCity);
 
   useEffect(() => {
-    if (!selectedCity || !token) return;
-    let cancelled = false;
+    // Don't fire a request that's doomed to fail while offline — the offline
+    // state below explains the gap. Re-runs when connectivity returns.
+    if (!selectedCity || !token || !online) return;
+    // Abort the previous city's fetch when this effect re-runs (city change)
+    // or unmounts, so rapid switching doesn't pile up concurrent requests.
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
     setWeather(null);
-    getWeather(selectedCity, token)
+    getWeather(selectedCity, token, { signal: controller.signal })
       .then(({ weather }) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setWeather(weather);
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setError(
           err instanceof ApiError
             ? 'Could not load the weather for that city.'
@@ -51,16 +58,14 @@ export default function HomePage() {
         );
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedCity, token, refetchKey]);
+    return () => controller.abort();
+  }, [selectedCity, token, refetchKey, online]);
 
-  function handleSelectCity(city: City) {
+  function handleSelectCity(city: City | null) {
     setSelectedCity(city);
-    setRecent((prev) => saveRecent(city, prev));
+    if (city) setRecent((prev) => saveRecent(city, prev));
   }
 
   return (
@@ -78,20 +83,26 @@ export default function HomePage() {
         </p>
 
         <div className="mt-10 max-w-xl">
-          <CitySearch recentCities={recent} onSelect={handleSelectCity} />
+          <CitySearch
+            value={selectedCity}
+            onChange={handleSelectCity}
+            recentCities={recent}
+          />
         </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           <div className="md:col-span-2">
             {!selectedCity && <WeatherEmpty />}
-            {selectedCity && loading && <WeatherLoading />}
-            {selectedCity && error && !loading && (
-              <WeatherErrorCard
+            {selectedCity && !online && <WeatherOffline />}
+            {selectedCity && online && loading && <WeatherLoading />}
+            {selectedCity && online && error && !loading && (
+              <StatusBanner
+                kind="error"
                 message={error}
                 onRetry={() => setRefetchKey((k) => k + 1)}
               />
             )}
-            {selectedCity && weather && !loading && !error && (
+            {selectedCity && online && weather && !loading && !error && (
               <WeatherCard weather={weather} />
             )}
           </div>
@@ -108,7 +119,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      <ToastHost latest={liveMessage} />
+      <ToastHost subscribe={subscribe} />
     </section>
   );
 }
