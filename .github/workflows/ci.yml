@@ -45,6 +45,7 @@ jobs:
       - run: npx prisma generate
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run dead-code
       - run: npm test
       - run: npm run build
 
@@ -64,5 +65,18 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run dead-code
       - run: npm test
       - run: npm run build
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    # Catches Dockerfile rot (a base-image bump dropping a package, a stale
+    # COPY target) at PR time. Build only — no registry push.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t nimbus-backend:ci ./backend
+      - name: Build frontend image
+        run: docker build -t nimbus-frontend:ci ./frontend
