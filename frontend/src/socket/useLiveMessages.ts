@@ -1,4 +1,10 @@
-import { useContext, useEffect, useState } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { ApiError, getMessageHistory } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import type { City, LiveMessage } from '../types';
@@ -21,8 +27,9 @@ export function useConnectionStatus(): ConnectionStatus {
 
 export interface UseCityMessagesResult {
   history: LiveMessage[];
-  latest: LiveMessage | null;
   historyError: string | null;
+  /** Subscribe to live messages for this city; returns an unsubscribe function. */
+  subscribe: (listener: (message: LiveMessage) => void) => () => void;
 }
 
 /**
@@ -38,8 +45,21 @@ export function useCityMessages(city: City | null): UseCityMessagesResult {
   const { socket } = useLiveMessagesContext();
   const { token } = useAuth();
   const [history, setHistory] = useState<LiveMessage[]>([]);
-  const [latest, setLatest] = useState<LiveMessage | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+
+  // Live messages are delivered to subscribers (e.g. ToastHost) rather than
+  // held in a single "latest" slot, so two messages arriving in one batch both
+  // fire instead of the earlier one being overwritten before anyone reads it.
+  const listenersRef = useRef(new Set<(message: LiveMessage) => void>());
+  const subscribe = useCallback(
+    (listener: (message: LiveMessage) => void) => {
+      listenersRef.current.add(listener);
+      return () => {
+        listenersRef.current.delete(listener);
+      };
+    },
+    [],
+  );
 
   const latitude = city?.latitude ?? null;
   const longitude = city?.longitude ?? null;
@@ -48,7 +68,6 @@ export function useCityMessages(city: City | null): UseCityMessagesResult {
   useEffect(() => {
     if (latitude === null || longitude === null || !token) {
       setHistory([]);
-      setLatest(null);
       setHistoryError(null);
       return;
     }
@@ -57,7 +76,6 @@ export function useCityMessages(city: City | null): UseCityMessagesResult {
     const controller = new AbortController();
     setHistoryError(null);
     setHistory([]);
-    setLatest(null);
 
     getMessageHistory({ latitude, longitude }, token, {
       signal: controller.signal,
@@ -98,7 +116,7 @@ export function useCityMessages(city: City | null): UseCityMessagesResult {
         if (prev.some((m) => m.id === msg.id)) return prev;
         return [msg, ...prev].slice(0, 50);
       });
-      setLatest(msg);
+      listenersRef.current.forEach((listener) => listener(msg));
     }
 
     joinRoom();
@@ -118,5 +136,5 @@ export function useCityMessages(city: City | null): UseCityMessagesResult {
     // a server-side logging hint.
   }, [socket, latitude, longitude, city?.name]);
 
-  return { history, latest, historyError };
+  return { history, historyError, subscribe };
 }
