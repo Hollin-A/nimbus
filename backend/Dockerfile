@@ -9,7 +9,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY tsconfig.json tsconfig.build.json ./
+COPY prisma ./prisma
 COPY src ./src
+# `npm run build` runs `prisma generate` (needs the schema above) then tsc.
 RUN npm run build
 
 # ---- Runtime stage: prod deps only + compiled JS ----
@@ -21,6 +23,9 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
+# Carry the generated Prisma client (engine binary + client) from the build
+# stage — `npm ci` installs @prisma/client but doesn't run `prisma generate`.
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/dist ./dist
 
 EXPOSE 4000
