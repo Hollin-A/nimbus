@@ -24,7 +24,11 @@ vi.mock('../auth/useAuth', () => ({
 
 // The live-message machinery (socket + REST history) is out of scope here.
 vi.mock('../socket/useLiveMessages', () => ({
-  useCityMessages: () => ({ history: [], latest: null, historyError: null }),
+  useCityMessages: () => ({
+    history: [],
+    historyError: null,
+    subscribe: () => () => {},
+  }),
 }));
 
 vi.mock('../api/client', async (importActual) => {
