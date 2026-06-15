@@ -494,3 +494,8 @@ security:
 #   leave-city   client → server   (no payload)   Leaves the current room; optional ack.
 #   live-message server → client   LiveMessage    Emitted to a city room when POST /api/messages
 #                                                  targets those coordinates.
+#
+# Rooms are keyed by coordinates (`city:<lat>|<lon>`). A socket is in at most
+# one room — joining a new city leaves the previous one. Room membership is lost
+# on disconnect, so the client re-emits join-city on reconnect. The handshake
+# token is the short-lived access token (refresh, then reconnect, on expiry).
