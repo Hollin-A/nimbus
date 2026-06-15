@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import MessageHistory from '../components/MessageHistory';
 import type { LiveMessage } from '../types';
@@ -70,15 +70,23 @@ describe('MessageHistory', () => {
   });
 
   it('renders a relative time label per message', () => {
-    const messages = [
-      makeMessage({
-        id: '1',
-        createdAt: new Date(Date.now() - 30_000).toISOString(),
-      }),
-    ];
-    render(<MessageHistory city="Melbourne" messages={messages} />);
+    // Pin the clock so the gap between building the fixture and rendering is
+    // exactly 30s — otherwise CI load can push it to 31s and flake.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-27T12:00:00.000Z'));
+    try {
+      const messages = [
+        makeMessage({
+          id: '1',
+          createdAt: new Date(Date.now() - 30_000).toISOString(),
+        }),
+      ];
+      render(<MessageHistory city="Melbourne" messages={messages} />);
 
-    // 30 seconds ago should be "30s ago"
-    expect(screen.getByText(/30s ago/)).toBeInTheDocument();
+      // 30 seconds ago should be "30s ago"
+      expect(screen.getByText(/30s ago/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

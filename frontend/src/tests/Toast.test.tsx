@@ -37,6 +37,14 @@ describe('Toast', () => {
     expect(
       container.querySelector('.text-severity-alert-text'),
     ).toBeInTheDocument();
+    // …and not the other severities' tints (a bug applying all three would
+    // otherwise pass every positive assertion).
+    expect(
+      container.querySelector('.bg-severity-info-bg'),
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelector('.bg-severity-warning-bg'),
+    ).not.toBeInTheDocument();
   });
 
   it('applies info-tinted styling for severity=info', () => {
@@ -47,6 +55,12 @@ describe('Toast', () => {
     expect(
       container.querySelector('.text-severity-info-text'),
     ).toBeInTheDocument();
+    expect(
+      container.querySelector('.bg-severity-alert-bg'),
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelector('.bg-severity-warning-bg'),
+    ).not.toBeInTheDocument();
   });
 
   it('applies warning-tinted styling for severity=warning', () => {
@@ -59,6 +73,12 @@ describe('Toast', () => {
     expect(
       container.querySelector('.text-severity-warning-text'),
     ).toBeInTheDocument();
+    expect(
+      container.querySelector('.bg-severity-alert-bg'),
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelector('.bg-severity-info-bg'),
+    ).not.toBeInTheDocument();
   });
 
   it('fires onClose when the dismiss button is clicked', async () => {
