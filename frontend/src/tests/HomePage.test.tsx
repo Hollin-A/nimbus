@@ -41,12 +41,12 @@ vi.mock('../api/client', async (importActual) => {
 const CITY_A = { name: 'Oslo', latitude: 59.91, longitude: 10.75 };
 const CITY_B = { name: 'Bergen', latitude: 60.39, longitude: 5.32 };
 vi.mock('../components/CitySearch', () => ({
-  default: ({ onSelect }: { onSelect: (c: typeof CITY_A) => void }) => (
+  default: ({ onChange }: { onChange: (c: typeof CITY_A | null) => void }) => (
     <div>
-      <button type="button" onClick={() => onSelect(CITY_A)}>
+      <button type="button" onClick={() => onChange(CITY_A)}>
         select A
       </button>
-      <button type="button" onClick={() => onSelect(CITY_B)}>
+      <button type="button" onClick={() => onChange(CITY_B)}>
         select B
       </button>
     </div>

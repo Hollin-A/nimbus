@@ -63,9 +63,9 @@ export default function HomePage() {
     return () => controller.abort();
   }, [selectedCity, token, refetchKey, online]);
 
-  function handleSelectCity(city: City) {
+  function handleSelectCity(city: City | null) {
     setSelectedCity(city);
-    setRecent((prev) => saveRecent(city, prev));
+    if (city) setRecent((prev) => saveRecent(city, prev));
   }
 
   return (
@@ -83,7 +83,11 @@ export default function HomePage() {
         </p>
 
         <div className="mt-10 max-w-xl">
-          <CitySearch recentCities={recent} onSelect={handleSelectCity} />
+          <CitySearch
+            value={selectedCity}
+            onChange={handleSelectCity}
+            recentCities={recent}
+          />
         </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-3">
