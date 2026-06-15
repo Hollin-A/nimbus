@@ -9,6 +9,7 @@ import {
   logout,
 } from './auth.service';
 import { requireAuth } from './auth.middleware';
+import { validateBody } from '../middleware/validation';
 import { usersRepo, toPublicUser, DuplicateUsernameError } from './users.repo';
 
 // Usernames are case-insensitive: trim + lowercase at the validation
@@ -46,21 +47,13 @@ const router = Router();
 router.post(
   '/register',
   express.json({ limit: '512b' }),
+  validateBody(registerSchema),
   async (req: Request, res: Response, next: NextFunction) => {
-    const parsed = registerSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        error: 'Invalid request body',
-        details: parsed.error.flatten().fieldErrors,
-      });
-      return;
-    }
-
     try {
       const user = await registerUser(
-        parsed.data.username,
-        parsed.data.password,
-        parsed.data.displayName,
+        req.body.username,
+        req.body.password,
+        req.body.displayName,
       );
       req.log.info(
         { event: 'auth.register', userId: user.id, username: user.username, ip: req.ip },
@@ -89,20 +82,16 @@ router.post(
 router.post(
   '/password-reset/request',
   express.json({ limit: '256b' }),
+  validateBody(resetRequestSchema),
   async (req: Request, res: Response, next: NextFunction) => {
-    const parsed = resetRequestSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid request body' });
-      return;
-    }
     try {
-      const issued = await requestPasswordReset(parsed.data.username);
+      const issued = await requestPasswordReset(req.body.username);
       if (!issued) {
         res.status(404).json({ error: 'No account with that username' });
         return;
       }
       req.log.info(
-        { event: 'auth.password_reset.request', username: parsed.data.username, ip: req.ip },
+        { event: 'auth.password_reset.request', username: req.body.username, ip: req.ip },
         'password reset requested',
       );
       res.status(200).json({
@@ -119,14 +108,10 @@ router.post(
 router.post(
   '/password-reset/confirm',
   express.json({ limit: '512b' }),
+  validateBody(resetConfirmSchema),
   async (req: Request, res: Response, next: NextFunction) => {
-    const parsed = resetConfirmSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid request body' });
-      return;
-    }
     try {
-      const ok = await confirmPasswordReset(parsed.data.token, parsed.data.password);
+      const ok = await confirmPasswordReset(req.body.token, req.body.password);
       if (!ok) {
         res.status(400).json({ error: 'Invalid or expired reset token' });
         return;
@@ -143,44 +128,40 @@ router.post(
 // demo account) and well below anything an attacker would want to
 // throw at bcrypt. The 413 short-circuits the bcrypt compare on
 // oversized credentials.
-router.post('/login', express.json({ limit: '256b' }), async (req: Request, res: Response) => {
-  const parsed = loginSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({
-      error: 'Invalid request body',
-      details: parsed.error.flatten().fieldErrors,
-    });
-    return;
-  }
+router.post(
+  '/login',
+  express.json({ limit: '256b' }),
+  validateBody(loginSchema),
+  async (req: Request, res: Response) => {
+    const result = await authenticate(req.body.username, req.body.password);
+    if (!result) {
+      // Audit trail: failed-login patterns per IP are the brute-force
+      // signal the rate limiter stops but never surfaces. Attempted
+      // username only — never the password.
+      req.log.warn(
+        { event: 'auth.login.failure', username: req.body.username, ip: req.ip },
+        'login failed',
+      );
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
+    }
 
-  const result = await authenticate(parsed.data.username, parsed.data.password);
-  if (!result) {
-    // Audit trail: failed-login patterns per IP are the brute-force
-    // signal the rate limiter stops but never surfaces. Attempted
-    // username only — never the password.
-    req.log.warn(
-      { event: 'auth.login.failure', username: parsed.data.username, ip: req.ip },
-      'login failed',
+    req.log.info(
+      {
+        event: 'auth.login.success',
+        userId: result.user.id,
+        username: result.user.username,
+        ip: req.ip,
+      },
+      'login succeeded',
     );
-    res.status(401).json({ error: 'Invalid credentials' });
-    return;
-  }
-
-  req.log.info(
-    {
-      event: 'auth.login.success',
-      userId: result.user.id,
-      username: result.user.username,
-      ip: req.ip,
-    },
-    'login succeeded',
-  );
-  res.json({
-    accessToken: result.accessToken,
-    refreshToken: result.refreshToken,
-    user: result.user,
-  });
-});
+    res.json({
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      user: result.user,
+    });
+  },
+);
 
 // Exchanges a refresh token for a fresh access + refresh pair (rotation).
 // No requireAuth: the access token is expected to be expired by the time
@@ -188,14 +169,10 @@ router.post('/login', express.json({ limit: '256b' }), async (req: Request, res:
 router.post(
   '/refresh',
   express.json({ limit: '512b' }),
+  validateBody(refreshSchema),
   async (req: Request, res: Response, next: NextFunction) => {
-    const parsed = refreshSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid request body' });
-      return;
-    }
     try {
-      const result = await refreshSession(parsed.data.refreshToken);
+      const result = await refreshSession(req.body.refreshToken);
       if (!result) {
         res.status(401).json({ error: 'Invalid or expired refresh token' });
         return;
@@ -217,14 +194,10 @@ router.post(
 router.post(
   '/logout',
   express.json({ limit: '512b' }),
+  validateBody(refreshSchema),
   async (req: Request, res: Response, next: NextFunction) => {
-    const parsed = refreshSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: 'Invalid request body' });
-      return;
-    }
     try {
-      await logout(parsed.data.refreshToken);
+      await logout(req.body.refreshToken);
       req.log.info({ event: 'auth.logout', ip: req.ip }, 'logged out');
       res.status(200).json({ ok: true });
     } catch (err) {

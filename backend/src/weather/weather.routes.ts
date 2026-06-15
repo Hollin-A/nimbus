@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../auth/auth.middleware';
+import { validateQuery } from '../middleware/validation';
 import { logger } from '../logger';
 import { getWeather, searchCities, WeatherError } from './weather.service';
 
@@ -20,17 +21,10 @@ const router = Router();
 router.get(
   '/cities',
   requireAuth,
-  async (req: Request, res: Response, next: NextFunction) => {
-    const parsed = citiesQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      res.status(400).json({
-        error: 'Invalid query',
-        details: parsed.error.flatten().fieldErrors,
-      });
-      return;
-    }
+  validateQuery(citiesQuerySchema),
+  async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      const cities = await searchCities(parsed.data.q);
+      const cities = await searchCities(res.locals.query.q);
       res.json({ cities });
     } catch (err) {
       if (err instanceof WeatherError) {
@@ -48,22 +42,11 @@ router.get(
 router.get(
   '/',
   requireAuth,
-  async (req: Request, res: Response, next: NextFunction) => {
-    const parsed = weatherQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      res.status(400).json({
-        error: 'Invalid query',
-        details: parsed.error.flatten().fieldErrors,
-      });
-      return;
-    }
+  validateQuery(weatherQuerySchema),
+  async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      const weather = await getWeather(
-        parsed.data.lat,
-        parsed.data.lon,
-        parsed.data.name,
-        parsed.data.country,
-      );
+      const { lat, lon, name, country } = res.locals.query;
+      const weather = await getWeather(lat, lon, name, country);
       res.json({ weather });
     } catch (err) {
       if (err instanceof WeatherError) {
