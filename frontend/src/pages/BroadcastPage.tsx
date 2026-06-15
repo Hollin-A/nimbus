@@ -1,6 +1,5 @@
 import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
-import { X } from 'lucide-react';
 import { ApiError, pushMessage } from '../api/client';
 import { useAuth } from '../auth/useAuth';
 import CitySearch from '../components/CitySearch';
@@ -204,37 +203,11 @@ export default function BroadcastPage() {
               <span className="block text-sm font-semibold text-ink mb-1">
                 Target city
               </span>
-              {targetCity ? (
-                <div className="flex items-center justify-between rounded-input border border-border bg-white px-3 py-2.5">
-                  <div className="text-sm">
-                    <span className="font-semibold text-ink">
-                      {targetCity.name}
-                    </span>
-                    {targetCity.country && (
-                      <span className="ml-2 text-muted">
-                        {targetCity.country}
-                      </span>
-                    )}
-                    <span className="ml-3 text-xs text-muted">
-                      {targetCity.latitude.toFixed(2)},{' '}
-                      {targetCity.longitude.toFixed(2)}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => dispatch({ type: 'setCity', city: null })}
-                    aria-label="Clear selected city"
-                    className="text-muted hover:text-ink transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <CitySearch
-                  recentCities={recentTargets}
-                  onSelect={(city) => dispatch({ type: 'setCity', city })}
-                />
-              )}
+              <CitySearch
+                value={targetCity}
+                onChange={(city) => dispatch({ type: 'setCity', city })}
+                recentCities={recentTargets}
+              />
             </div>
 
             <div>

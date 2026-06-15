@@ -37,19 +37,19 @@ const TEST_CITY: TestCity = { name: 'Lisbon', country: 'PT', latitude: 38.72, lo
 vi.mock('../components/CitySearch', () => ({
   default: ({
     recentCities,
-    onSelect,
+    onChange,
   }: {
     recentCities: TestCity[];
-    onSelect: (c: TestCity) => void;
+    onChange: (c: TestCity | null) => void;
   }) => (
     <div>
-      <button type="button" onClick={() => onSelect(TEST_CITY)}>
+      <button type="button" onClick={() => onChange(TEST_CITY)}>
         pick test city
       </button>
       <ul>
         {recentCities.map((c) => (
           <li key={`${c.latitude},${c.longitude}`}>
-            <button type="button" onClick={() => onSelect(c)}>
+            <button type="button" onClick={() => onChange(c)}>
               {c.name}
             </button>
           </li>
