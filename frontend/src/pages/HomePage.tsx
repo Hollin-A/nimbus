@@ -30,8 +30,8 @@ export default function HomePage() {
 
   const {
     history: messages,
-    latest: liveMessage,
     historyError,
+    subscribe,
   } = useCityMessages(selectedCity);
 
   useEffect(() => {
@@ -115,7 +115,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      <ToastHost latest={liveMessage} />
+      <ToastHost subscribe={subscribe} />
     </section>
   );
 }
