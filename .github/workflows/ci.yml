@@ -33,7 +33,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://nimbus:nimbus@localhost:5432/nimbus
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -56,7 +56,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -75,7 +75,7 @@ jobs:
     # Catches Dockerfile rot (a base-image bump dropping a package, a stale
     # COPY target) at PR time. Build only — no registry push.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build backend image
         run: docker build -t nimbus-backend:ci ./backend
       - name: Build frontend image
